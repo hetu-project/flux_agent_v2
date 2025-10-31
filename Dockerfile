@@ -20,6 +20,7 @@ RUN poetry config virtualenvs.create false && \
 
 # Copy source code
 COPY src/ ./src/
+COPY scripts/ ./scripts/
 
 # Expose port
 EXPOSE 8000

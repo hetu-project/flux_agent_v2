@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Depends
 from src.agents.rag_agent import RAGAgent
-from src.schemas.chat_schema import ChatRequest, ChatResponse, Source
+from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
 from src.api.dependencies import get_rag_agent
 from src.utils.logger import get_logger
 
@@ -19,39 +19,46 @@ async def chat(
     """
     Chat with the RAG agent.
     
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "your question"}
+        ]
+    }
+    
     The agent will automatically:
-    1. Judge if the question is about a project
-    2. If yes, search for the relevant project in database
+    1. Extract user query from the last message in messages array
+    2. Search for matching projects in database
     3. If project found, include project info in the response
-    4. If project not found or question is not about project, answer directly
+    4. If project not found, answer directly
     
     The 'project' parameter is optional and can be used to explicitly specify a project.
     If not provided, the agent will auto-detect and search for relevant projects.
     """
-    logger.info(f"Chat request received: query='{request.query[:100]}...', project={request.project}")
     try:
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        logger.info(f"Chat request received: query='{user_query[:100]}...', project={request.project}, model={request.model}")
+        
         result = await rag_agent.query(
-            user_question=request.query,
+            user_question=user_query,
             project=request.project,
             top_k=request.top_k
         )
         
-        # Format sources (may be empty if not using tweet context)
-        sources = [
-            Source(
-                text=s["text"],
-                author=s["author"],
-                created_at=s["created_at"],
-                score=s["score"]
-            )
-            for s in result["sources"]
-        ]
+        logger.info(f"Chat response generated successfully")
         
-        logger.info(f"Chat response generated successfully (sources: {len(sources)})")
+        # Format response in OpenAI-compatible format
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
         return ChatResponse(
-            answer=result["answer"],
-            sources=sources,
-            num_sources=result["num_sources"]
+            choices=[choice]
         )
         
     except Exception as e:

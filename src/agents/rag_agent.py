@@ -32,66 +32,68 @@ class RAGAgent:
         self.chat_model = settings.chat_model
         self.collection_name = "twitter_tweets"
     
-    def _judge_intent(self, user_question: str) -> bool:
-        """
-        Judge if the user's question is about a project.
-        
-        Args:
-            user_question: User's question
-            
-        Returns:
-            True if the question is about a project, False otherwise
-        """
-        logger.debug(f"Judging intent for question: {user_question[:50]}...")
-        intent_prompt = f"""Determine whether the following user question is about a project. Answer ONLY with YES or NO.
-
-User question: {user_question}
-
-Answer:"""
-        
-        try:
-            response = self.llm.chat.completions.create(
-                model=self.chat_model,
-                messages=[
-                    {"role": "system", "content": "You are an intent classification assistant. Answer ONLY with YES or NO."},
-                    {"role": "user", "content": intent_prompt}
-                ],
-                temperature=0.1,
-                max_tokens=10
-            )
-            
-            answer = response.choices[0].message.content.strip()
-            is_about_project = answer.strip().upper().startswith("YES")
-            logger.debug(f"Intent judgment result: {is_about_project}")
-            return is_about_project
-        except Exception as e:
-            logger.warning(f"Failed to judge intent: {e}, defaulting to False")
-            return False
-    
-    def _find_project(self, user_question: str) -> Optional[Dict[str, Any]]:
+    def _find_project(self, user_question: str, min_score: float = 0.6) -> Optional[Dict[str, Any]]:
         """
         Find the most relevant project from database based on user question.
         
+        This method uses vector similarity search to find projects. It only returns a project
+        if the similarity score is high enough (>= min_score), ensuring the user's question
+        is actually related to a specific project in the database.
+        
         Args:
             user_question: User's question
+            min_score: Minimum similarity score threshold (default: 0.6)
+                       Higher threshold = more strict matching
             
         Returns:
-            Project dict with name and description if found, None otherwise
+            Project dict with name and description if found with sufficient similarity, None otherwise
         """
         if not self.project_repo:
             logger.debug("Project repository not available")
             return None
         
         try:
-            logger.debug(f"Searching for project matching: {user_question[:50]}...")
-            # Use vector search to find the most relevant project (projects are shared, no user_id filter)
-            results = self.project_repo.search(query=user_question, top_k=1, min_score=0.5)
+            logger.debug(f"Searching for project matching: {user_question[:50]}... (min_score={min_score})")
+            # Use vector search to find the most relevant project
+            # Higher min_score ensures we only match when user explicitly mentions/asks about a project
+            results = self.project_repo.search(query=user_question, top_k=1, min_score=min_score)
             
             if results and len(results) > 0:
                 project = results[0]
-                logger.info(f"Found project: {project.get('name')} (score: {project.get('score', 0):.3f})")
-                return project
-            logger.debug("No project found matching the query")
+                score = project.get('score', 0)
+                project_name = project.get('name')
+                
+                if not project_name:
+                    logger.debug("Found project but no name, skipping")
+                    return None
+                
+                # Check if project name (or significant words from it) appears in question
+                question_lower = user_question.lower()
+                project_name_lower = project_name.lower()
+                
+                # Check for exact project name match
+                if project_name_lower in question_lower:
+                    logger.info(f"Found project '{project_name}' (score: {score:.3f}) - exact name match")
+                    return project
+                
+                # Check for partial match: split project name into words and check if any significant word appears
+                # This handles cases like "Akasha" matching "Akasha Dao"
+                project_words = [w for w in project_name_lower.split() if len(w) > 3]  # Only check words longer than 3 chars
+                for word in project_words:
+                    if word in question_lower:
+                        logger.info(f"Found project '{project_name}' (score: {score:.3f}) - partial name match (word: {word})")
+                        return project
+                
+                # If similarity is very high (>= 0.75), accept even if name not explicitly mentioned
+                # This handles cases like "tell me about the fancy project" matching based on description
+                if score >= 0.75:
+                    logger.info(f"Found project '{project_name}' (score: {score:.3f}) - high similarity match")
+                    return project
+                else:
+                    logger.debug(f"Project '{project_name}' found but similarity too low ({score:.3f} < 0.75) and name not mentioned")
+                    return None
+            
+            logger.debug(f"No project found matching the query (similarity threshold: {min_score})")
             return None
         except Exception as e:
             logger.error(f"Error finding project: {e}")
@@ -107,10 +109,11 @@ Answer:"""
         Query the agent with a question.
         
         Logic:
-        1. Judge if the question is about a project
-        2. If yes, search for the project in database
-        3. If project found, include project info in the prompt to LLM
-        4. If project not found or not about project, directly send question to LLM
+        1. Search for matching projects in database using vector similarity
+           - Only matches if user question mentions project name or has high similarity (>= 0.75)
+           - Uses stricter similarity threshold (0.6) to ensure relevance
+        2. If project found with sufficient similarity, include project info in the prompt
+        3. If project not found or similarity too low, answer question directly without project context
         
         Args:
             user_question: User's question
@@ -121,13 +124,12 @@ Answer:"""
             Agent response with answer and sources
         """
         logger.info(f"Processing query: {user_question[:100]}...")
-        # 1. Judge intent: is the question about a project?
-        is_about_project = self._judge_intent(user_question)
-        
+        # 1. Try to find a matching project in database
+        # We use vector search to find projects - if a project is found with sufficient similarity,
+        # it means the user's question is about a specific project
         found_project = None
-        if is_about_project and self.project_repo:
-            # 2. Try to find the project in database
-            found_project = self._find_project(user_question)
+        if self.project_repo:
+            found_project = self._find_project(user_question, min_score=0.6)
         
         # 3. If project is explicitly provided, use it (for backward compatibility)
         if project:
