@@ -7,6 +7,7 @@ from src.config import get_settings
 from src.services.qdrant_client import QdrantService
 from src.services.embedding import EmbeddingService
 from src.repositories.project_repository import ProjectRepository
+from src.repositories.project_content_repository import ProjectContentRepository
 from src.utils.logger import get_logger
 
 settings = get_settings()
@@ -16,10 +17,15 @@ logger = get_logger(__name__)
 class RAGAgent:
     """RAG Agent for querying and analyzing project information."""
     
-    def __init__(self, project_repo: Optional[ProjectRepository] = None):
+    def __init__(
+        self,
+        project_repo: Optional[ProjectRepository] = None,
+        project_content_repo: Optional[ProjectContentRepository] = None
+    ):
         self.qdrant = QdrantService()
         self.embedding = EmbeddingService()
         self.project_repo = project_repo
+        self.project_content_repo = project_content_repo
         
         # Initialize LLM client with AIHubMix
         if not settings.aihubmix_api_key:
@@ -30,7 +36,6 @@ class RAGAgent:
             base_url=settings.aihubmix_base_url
         )
         self.chat_model = settings.chat_model
-        self.collection_name = "twitter_tweets"
     
     def _find_project(self, user_question: str, min_score: float = 0.6) -> Optional[Dict[str, Any]]:
         """
@@ -143,23 +148,63 @@ class RAGAgent:
             except Exception:
                 pass
         
-        # 4. Build prompt based on whether project is found
+        # 4. Search for relevant content from project_content collection
+        sources = []
+        relevant_content = []
+        
+        if found_project and self.project_content_repo:
+            # Search for relevant content (tweets, papers, etc.) related to the project
+            logger.debug(f"Searching for relevant content for project '{found_project['name']}'")
+            relevant_content = self.project_content_repo.search(
+                query=user_question,
+                project_name=found_project['name'],
+                top_k=top_k,
+                min_score=0.6  # Minimum similarity threshold
+            )
+            
+            # Format sources from relevant content
+            for item in relevant_content[:top_k]:  # Limit to top_k
+                source_info = {
+                    "type": item.get("content_type", "unknown"),
+                    "content": item.get("content", "")[:200] + "..." if len(item.get("content", "")) > 200 else item.get("content", ""),
+                    "score": item.get("score", 0)
+                }
+                if item.get("title"):
+                    source_info["title"] = item.get("title")
+                if item.get("author"):
+                    source_info["author"] = item.get("author")
+                if item.get("source_url"):
+                    source_info["url"] = item.get("source_url")
+                sources.append(source_info)
+            
+            logger.info(f"Found {len(sources)} relevant content items for project '{found_project['name']}'")
+        
+        # 5. Build prompt based on whether project is found
         if found_project:
             # Include project information in the prompt
             project_info = f"Project name: {found_project['name']}"
             if found_project.get('description'):
                 project_info += f"\nProject description: {found_project['description']}"
             
-            prompt = f"""Answer the user's question based on the following project information.
+            # Add relevant content context if available
+            content_context = ""
+            if relevant_content:
+                content_context = "\n\nRelevant content from tweets, papers, and other sources:\n"
+                for i, item in enumerate(relevant_content[:top_k], 1):
+                    content_type = item.get("content_type", "content")
+                    content_text = item.get("content", "")[:300]  # Limit length
+                    if item.get("title"):
+                        content_context += f"\n[{i}] {item['title']} ({content_type}): {content_text}\n"
+                    else:
+                        content_context += f"\n[{i}] ({content_type}): {content_text}\n"
+            
+            prompt = f"""Answer the user's question based on the following project information and relevant content.
 
-{project_info}
+{project_info}{content_context}
 
 User question: {user_question}
 
-Provide a helpful answer based on the project info. If the information is insufficient, say so."""
-            
-            # No sources from tweets when using project info
-            sources = []
+Provide a helpful answer based on the project info and relevant content. If the information is insufficient, say so."""
         else:
             # Directly send question to LLM without project context
             prompt = f"""Please answer the user's question.
@@ -167,11 +212,8 @@ Provide a helpful answer based on the project info. If the information is insuff
 User question: {user_question}
 
 Provide a helpful, concise answer."""
-            
-            # No sources from tweets when not using project
-            sources = []
         
-        # 5. Generate answer using LLM
+        # 6. Generate answer using LLM
         logger.debug(f"Generating LLM response (model: {self.chat_model})")
         try:
             response = self.llm.chat.completions.create(

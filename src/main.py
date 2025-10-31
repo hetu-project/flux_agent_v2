@@ -17,9 +17,10 @@ from src.agents.rag_agent import RAGAgent
 from src.repositories.tweet_repository import TweetRepository
 from src.repositories.collection_repository import CollectionRepository
 from src.repositories.project_repository import ProjectRepository
+from src.repositories.project_content_repository import ProjectContentRepository
 
 # Import API routes
-from src.api.v1 import projects, tweets, chat, collections
+from src.api.v1 import projects, tweets, chat, collections, project_content
 from src.api.dependencies import set_dependencies
 
 # Initialize app
@@ -53,8 +54,18 @@ project_repo = ProjectRepository(
     collection_name="projects"
 )
 
-# Initialize RAG agent with project repository
-rag_agent = RAGAgent(project_repo=project_repo)
+# Initialize project content repository (for unified storage of tweets, papers, etc.)
+project_content_repo = ProjectContentRepository(
+    qdrant_service=qdrant_service,
+    embedding_service=embedding_service,
+    collection_name="project_content"
+)
+
+# Initialize RAG agent with project repository and project content repository
+rag_agent = RAGAgent(
+    project_repo=project_repo,
+    project_content_repo=project_content_repo
+)
 
 # Initialize repositories
 tweet_repo = TweetRepository(qdrant_service, collection_name="twitter_tweets")
@@ -72,6 +83,7 @@ tweet_service = TweetService(
 logger.info("Setting up dependencies...")
 set_dependencies(
     project_repo=project_repo,
+    project_content_repo=project_content_repo,
     tweet_repo=tweet_repo,
     tweet_service=tweet_service,
     embedding_service=embedding_service,
@@ -86,6 +98,7 @@ app.include_router(projects.router)
 app.include_router(tweets.router)
 app.include_router(chat.router)
 app.include_router(collections.router)
+app.include_router(project_content.router)
 logger.info("API routes registered successfully")
 logger.info("Application startup complete")
 

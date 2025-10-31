@@ -8,11 +8,13 @@ from src.services.qdrant_client import QdrantService
 from src.repositories.tweet_repository import TweetRepository
 from src.repositories.collection_repository import CollectionRepository
 from src.repositories.project_repository import ProjectRepository
+from src.repositories.project_content_repository import ProjectContentRepository
 from src.agents.rag_agent import RAGAgent
 
 
 # Global instances (initialized in main.py)
 _project_repo: ProjectRepository = None
+_project_content_repo: ProjectContentRepository = None
 _tweet_repo: TweetRepository = None
 _tweet_service: TweetService = None
 _embedding_service: EmbeddingService = None
@@ -22,6 +24,7 @@ _collection_repo: CollectionRepository = None
 
 def set_dependencies(
     project_repo: ProjectRepository,
+    project_content_repo: ProjectContentRepository,
     tweet_repo: TweetRepository,
     tweet_service: TweetService,
     embedding_service: EmbeddingService,
@@ -29,8 +32,9 @@ def set_dependencies(
     collection_repo: CollectionRepository,
 ):
     """Set global dependencies."""
-    global _project_repo, _tweet_repo, _tweet_service, _embedding_service, _rag_agent, _collection_repo
+    global _project_repo, _project_content_repo, _tweet_repo, _tweet_service, _embedding_service, _rag_agent, _collection_repo
     _project_repo = project_repo
+    _project_content_repo = project_content_repo
     _tweet_repo = tweet_repo
     _tweet_service = tweet_service
     _embedding_service = embedding_service
@@ -40,6 +44,10 @@ def set_dependencies(
 
 def get_project_repo() -> ProjectRepository:
     return _project_repo
+
+
+def get_project_content_repo() -> ProjectContentRepository:
+    return _project_content_repo
 
 
 def get_tweet_repo() -> TweetRepository:
