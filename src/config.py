@@ -1,7 +1,14 @@
 """Configuration settings for the application."""
 
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from functools import lru_cache
+from dotenv import load_dotenv
+import os
+
+# 加载 .env 文件
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -11,29 +18,25 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     
-    # LLM Provider Settings
-    llm_provider: str = "openai"  # "openai" or "aihubmix"
-    
-    # OpenAI / AIHubMix
-    openai_api_key: str = ""
-    openai_base_url: str = "https://api.openai.com/v1"
-    embedding_model: str = "text-embedding-ada-002"
-    chat_model: str = "gpt-4-turbo-preview"
-    
-    # AIHubMix specific (optional)
+    # AIHubMix Settings (从环境变量读取)
     aihubmix_api_key: str = ""
-    aihubmix_base_url: str = "https://aihubmix.com"
+    aihubmix_base_url: str = "https://aihubmix.com/v1"
+    embedding_model: str = "text-embedding-ada-002"
+    chat_model: str = "DeepSeek-V3.2-Exp"
     
-    # Twitter API
+    # Twitter API (从环境变量读取)
     twitter_bearer_token: str = ""
     
     # Application
     log_level: str = "INFO"
+    log_file: Optional[str] = Field(None, description="Optional log file path (logs/app.log)")
     
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="allow"
+        env_nested_delimiter="__",
+        extra="allow",
+        case_sensitive=False
     )
 
 

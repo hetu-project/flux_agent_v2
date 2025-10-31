@@ -7,8 +7,10 @@ from src.config import get_settings
 from src.services.qdrant_client import QdrantService
 from src.services.embedding import EmbeddingService
 from src.repositories.project_repository import ProjectRepository
+from src.utils.logger import get_logger
 
 settings = get_settings()
+logger = get_logger(__name__)
 
 
 class RAGAgent:
@@ -19,18 +21,13 @@ class RAGAgent:
         self.embedding = EmbeddingService()
         self.project_repo = project_repo
         
-        # Initialize LLM client with provider selection
-        api_key = settings.openai_api_key or settings.aihubmix_api_key
-        base_url = None
-        
-        if settings.llm_provider == "aihubmix" and settings.aihubmix_api_key:
-            base_url = settings.aihubmix_base_url
-        elif settings.llm_provider == "openai" and settings.openai_api_key:
-            base_url = settings.openai_base_url
+        # Initialize LLM client with AIHubMix
+        if not settings.aihubmix_api_key:
+            raise ValueError("AIHUBMIX_API_KEY is required. Please set it in .env file or environment variables.")
         
         self.llm = OpenAI(
-            api_key=api_key,
-            base_url=base_url
+            api_key=settings.aihubmix_api_key,
+            base_url=settings.aihubmix_base_url
         )
         self.chat_model = settings.chat_model
         self.collection_name = "twitter_tweets"
@@ -45,17 +42,18 @@ class RAGAgent:
         Returns:
             True if the question is about a project, False otherwise
         """
-        intent_prompt = f"""请判断以下用户提问是否在询问项目相关的事情。只需要回答"是"或"否"。
+        logger.debug(f"Judging intent for question: {user_question[:50]}...")
+        intent_prompt = f"""Determine whether the following user question is about a project. Answer ONLY with YES or NO.
 
-用户提问: {user_question}
+User question: {user_question}
 
-回答:"""
+Answer:"""
         
         try:
             response = self.llm.chat.completions.create(
                 model=self.chat_model,
                 messages=[
-                    {"role": "system", "content": "你是一个意图判断助手，只需要回答\"是\"或\"否\"。"},
+                    {"role": "system", "content": "You are an intent classification assistant. Answer ONLY with YES or NO."},
                     {"role": "user", "content": intent_prompt}
                 ],
                 temperature=0.1,
@@ -63,9 +61,11 @@ class RAGAgent:
             )
             
             answer = response.choices[0].message.content.strip()
-            return "是" in answer or "yes" in answer.lower() or "true" in answer.lower()
-        except Exception:
-            # 如果判断失败，默认认为不是询问项目
+            is_about_project = answer.strip().upper().startswith("YES")
+            logger.debug(f"Intent judgment result: {is_about_project}")
+            return is_about_project
+        except Exception as e:
+            logger.warning(f"Failed to judge intent: {e}, defaulting to False")
             return False
     
     def _find_project(self, user_question: str) -> Optional[Dict[str, Any]]:
@@ -79,16 +79,22 @@ class RAGAgent:
             Project dict with name and description if found, None otherwise
         """
         if not self.project_repo:
+            logger.debug("Project repository not available")
             return None
         
         try:
-            # Use vector search to find the most relevant project
+            logger.debug(f"Searching for project matching: {user_question[:50]}...")
+            # Use vector search to find the most relevant project (projects are shared, no user_id filter)
             results = self.project_repo.search(query=user_question, top_k=1, min_score=0.5)
             
             if results and len(results) > 0:
-                return results[0]
+                project = results[0]
+                logger.info(f"Found project: {project.get('name')} (score: {project.get('score', 0):.3f})")
+                return project
+            logger.debug("No project found matching the query")
             return None
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error finding project: {e}")
             return None
     
     async def query(
@@ -114,6 +120,7 @@ class RAGAgent:
         Returns:
             Agent response with answer and sources
         """
+        logger.info(f"Processing query: {user_question[:100]}...")
         # 1. Judge intent: is the question about a project?
         is_about_project = self._judge_intent(user_question)
         
@@ -137,47 +144,53 @@ class RAGAgent:
         # 4. Build prompt based on whether project is found
         if found_project:
             # Include project information in the prompt
-            project_info = f"项目名称: {found_project['name']}"
+            project_info = f"Project name: {found_project['name']}"
             if found_project.get('description'):
-                project_info += f"\n项目描述: {found_project['description']}"
+                project_info += f"\nProject description: {found_project['description']}"
             
-            prompt = f"""基于以下项目信息回答用户的问题。
+            prompt = f"""Answer the user's question based on the following project information.
 
 {project_info}
 
-用户提问: {user_question}
+User question: {user_question}
 
-请根据项目信息提供帮助。如果项目信息不足以回答问题，请说明。"""
+Provide a helpful answer based on the project info. If the information is insufficient, say so."""
             
             # No sources from tweets when using project info
             sources = []
         else:
             # Directly send question to LLM without project context
-            prompt = f"""请回答用户的问题。
+            prompt = f"""Please answer the user's question.
 
-用户提问: {user_question}
+User question: {user_question}
 
-请提供有帮助的回答。"""
+Provide a helpful, concise answer."""
             
             # No sources from tweets when not using project
             sources = []
         
         # 5. Generate answer using LLM
-        response = self.llm.chat.completions.create(
-            model=self.chat_model,
-            messages=[
-                {"role": "system", "content": "你是一个有用的助手，帮助用户回答问题。"},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1000
-        )
-        
-        answer = response.choices[0].message.content
-        
-        return {
-            "answer": answer,
-            "sources": sources,
-            "num_sources": len(sources)
-        }
+        logger.debug(f"Generating LLM response (model: {self.chat_model})")
+        try:
+            response = self.llm.chat.completions.create(
+                model=self.chat_model,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that answers user questions clearly and concisely."},
+                        {"role": "user", "content": prompt}
+                    ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            answer = response.choices[0].message.content
+            logger.info(f"Generated response (length: {len(answer)})")
+            
+            return {
+                "answer": answer,
+                "sources": sources,
+                "num_sources": len(sources)
+            }
+        except Exception as e:
+            logger.error(f"Error generating LLM response: {e}")
+            raise
 

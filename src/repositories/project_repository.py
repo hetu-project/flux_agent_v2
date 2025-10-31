@@ -1,10 +1,14 @@
 """Repository layer for Project CRUD operations."""
 
 from typing import List, Optional, Dict, Any
+import hashlib
 from src.models.project import Project
 from src.services.qdrant_client import QdrantService
 from src.services.embedding import EmbeddingService
 from qdrant_client.http.models import PointStruct, Filter, FieldCondition, MatchValue
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ProjectRepository:
@@ -25,6 +29,21 @@ class ProjectRepository:
         self.embedding = embedding_service
         self.collection_name = collection_name
     
+    def _name_to_id(self, name: str) -> int:
+        """
+        Convert project name to integer ID using hash.
+        
+        Args:
+            name: Project name
+            
+        Returns:
+            Integer ID for Qdrant
+        """
+        # Use MD5 hash and take first 8 bytes to create a positive integer
+        hash_bytes = hashlib.md5(name.encode()).digest()[:8]
+        # Convert to unsigned integer (always positive)
+        return int.from_bytes(hash_bytes, byteorder='big')
+    
     def _ensure_collection(self):
         """Ensure collection exists with proper vector size."""
         try:
@@ -44,31 +63,45 @@ class ProjectRepository:
         Returns:
             Created project
         """
+        logger.info(f"Creating project: {project.name}")
         self._ensure_collection()
+        
+        # Convert project name to integer ID
+        project_id = self._name_to_id(project.name)
+        logger.debug(f"Project ID for '{project.name}': {project_id}")
         
         # Check if project already exists
         try:
             existing = self.qdrant.client.retrieve(
                 collection_name=self.collection_name,
-                ids=[project.name]
+                ids=[project_id]
             )
             if existing:
-                raise ValueError(f"Project '{project.name}' already exists")
-        except Exception:
+                # Check if the existing project has the same name
+                existing_payload = existing[0].payload
+                if existing_payload.get("name") == project.name:
+                    logger.warning(f"Project '{project.name}' already exists")
+                    raise ValueError(f"Project '{project.name}' already exists")
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.debug(f"Error checking existing project: {e}")
             pass
         
         # Generate embedding for project description (or name if no description)
         text_to_embed = project.description or project.name
+        logger.debug(f"Generating embedding for: {text_to_embed[:50]}...")
         vector = self.embedding.embed_text(text_to_embed)
         
-        # Create point with embedding vector
+        # Create point with embedding vector (use integer ID)
         point = PointStruct(
-            id=project.name,
+            id=project_id,
             vector=vector,
             payload=project.to_payload()
         )
         
         self.qdrant.upsert_points(self.collection_name, [point])
+        logger.info(f"Project '{project.name}' created successfully")
         return project
     
     def get_by_name(self, name: str) -> Optional[Project]:
@@ -83,9 +116,12 @@ class ProjectRepository:
         """
         try:
             self._ensure_collection()
+            # Convert name to integer ID
+            project_id = self._name_to_id(name)
+            
             points = self.qdrant.client.retrieve(
                 collection_name=self.collection_name,
-                ids=[name]
+                ids=[project_id]
             )
             
             if not points or len(points) == 0:
@@ -93,6 +129,10 @@ class ProjectRepository:
             
             point = points[0]
             payload = point.payload
+            
+            # Verify the name matches (in case of hash collision)
+            if payload.get("name") != name:
+                return None
             
             return Project(
                 name=payload.get("name", name),
@@ -155,11 +195,14 @@ class ProjectRepository:
                 text_to_embed = project.description or project.name
                 vector = self.embedding.embed_text(text_to_embed)
                 
+                # Convert name to integer ID
+                project_id = self._name_to_id(name)
+                
                 # Update both payload and vector in Qdrant
                 self.qdrant.client.upsert(
                     collection_name=self.collection_name,
                     points=[PointStruct(
-                        id=name,
+                        id=project_id,
                         vector=vector,
                         payload=project.to_payload()
                     )]
@@ -181,7 +224,9 @@ class ProjectRepository:
         """
         try:
             self._ensure_collection()
-            self.qdrant.delete_points(self.collection_name, [name])
+            # Convert name to integer ID
+            project_id = self._name_to_id(name)
+            self.qdrant.delete_points(self.collection_name, [project_id])
             return True
         except Exception:
             return False
@@ -235,7 +280,7 @@ class ProjectRepository:
             # Generate query embedding
             query_vector = self.embedding.embed_text(query)
             
-            # Search in Qdrant
+            # Search in Qdrant (no user_id filter for projects - they are shared)
             results = self.qdrant.search(
                 collection_name=self.collection_name,
                 query_vector=query_vector,

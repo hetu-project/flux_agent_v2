@@ -4,7 +4,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from src.agents.rag_agent import RAGAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, Source
 from src.api.dependencies import get_rag_agent
+from src.utils.logger import get_logger
 
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
@@ -26,6 +28,7 @@ async def chat(
     The 'project' parameter is optional and can be used to explicitly specify a project.
     If not provided, the agent will auto-detect and search for relevant projects.
     """
+    logger.info(f"Chat request received: query='{request.query[:100]}...', project={request.project}")
     try:
         result = await rag_agent.query(
             user_question=request.query,
@@ -44,6 +47,7 @@ async def chat(
             for s in result["sources"]
         ]
         
+        logger.info(f"Chat response generated successfully (sources: {len(sources)})")
         return ChatResponse(
             answer=result["answer"],
             sources=sources,
@@ -51,5 +55,6 @@ async def chat(
         )
         
     except Exception as e:
+        logger.error(f"Error processing chat request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 

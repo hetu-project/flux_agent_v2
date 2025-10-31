@@ -7,6 +7,9 @@ from src.schemas.project_schema import (
     ProjectUpdateRequest,
     ProjectResponse,
     ProjectListResponse,
+    ProjectSearchRequest,
+    ProjectSearchResponse,
+    ProjectSearchResult,
 )
 from src.models.project import Project
 from src.api.dependencies import get_project_repo
@@ -116,6 +119,39 @@ async def delete_project(
         return None
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/search", response_model=ProjectSearchResponse)
+async def search_projects(
+    request: ProjectSearchRequest,
+    project_repo: ProjectRepository = Depends(get_project_repo),
+):
+    """
+    Search projects by description using vector similarity.
+    """
+    try:
+        results = project_repo.search(
+            query=request.query,
+            top_k=request.top_k,
+            min_score=request.min_score
+        )
+        
+        # Format results
+        search_results = [
+            ProjectSearchResult(
+                name=r["name"],
+                description=r.get("description"),
+                score=r["score"]
+            )
+            for r in results
+        ]
+        
+        return ProjectSearchResponse(
+            results=search_results,
+            total=len(search_results)
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

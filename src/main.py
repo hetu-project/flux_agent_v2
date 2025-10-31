@@ -4,6 +4,11 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import get_settings
+from src.utils.logger import setup_logging, get_logger
+
+# Initialize logging first
+setup_logging()
+logger = get_logger(__name__)
 from src.services.qdrant_client import QdrantService
 from src.services.embedding import EmbeddingService
 from src.services.twitter import TwitterService
@@ -34,10 +39,12 @@ app.add_middleware(
 )
 
 # Initialize services and repositories
+logger.info("Initializing services and repositories...")
 settings = get_settings()
 qdrant_service = QdrantService()
 embedding_service = EmbeddingService()
 twitter_service = TwitterService()
+logger.info("Services initialized successfully")
 
 # Initialize repositories first
 project_repo = ProjectRepository(
@@ -62,6 +69,7 @@ tweet_service = TweetService(
 )
 
 # Set dependencies for API routes
+logger.info("Setting up dependencies...")
 set_dependencies(
     project_repo=project_repo,
     tweet_repo=tweet_repo,
@@ -70,12 +78,16 @@ set_dependencies(
     rag_agent=rag_agent,
     collection_repo=collection_repo,
 )
+logger.info("Dependencies set successfully")
 
 # Register routes
+logger.info("Registering API routes...")
 app.include_router(projects.router)
 app.include_router(tweets.router)
 app.include_router(chat.router)
 app.include_router(collections.router)
+logger.info("API routes registered successfully")
+logger.info("Application startup complete")
 
 
 @app.get("/")

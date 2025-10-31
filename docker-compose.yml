@@ -10,11 +10,8 @@ services:
       - ./qdrant_storage:/qdrant/storage
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    # Note: Qdrant image doesn't include curl, so we use a simple process check
+    # Health check is disabled, relying on service availability
     networks:
       - hetu-network
 
@@ -35,7 +32,7 @@ services:
       - QDRANT_PORT=6333
     depends_on:
       qdrant:
-        condition: service_healthy
+        condition: service_started
     networks:
       - hetu-network
     restart: unless-stopped
