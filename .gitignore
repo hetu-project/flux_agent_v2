@@ -28,7 +28,7 @@ env/
 .venv
 
 # Poetry
-poetry.lock
+# poetry.lock - Now committed to ensure consistent dependencies
 
 # IDE
 .vscode/
