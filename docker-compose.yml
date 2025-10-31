@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     container_name: hetu-agent-api
     ports:
-      - "8000:8000"
+      - "6000:8000"
     volumes:
       # Mount source code for development
       - ./src:/app/src:ro
