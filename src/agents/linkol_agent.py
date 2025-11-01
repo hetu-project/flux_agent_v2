@@ -207,11 +207,14 @@ Respond with only "yes" or "no"."""
         if not is_linkol_related:
             logger.info("Query is not Linkol-related, using LLM to answer directly")
             try:
+                # Build prompt with identity handling
+                prompt = user_question
+                
                 response = self.llm.chat.completions.create(
                     model=self.chat_model,
                     messages=[
-                        {"role": "system", "content": "You are a helpful assistant. Provide clear and informative answers to user questions."},
-                        {"role": "user", "content": user_question}
+                        {"role": "system", "content": "You are a helpful assistant for Linkol. You are a Linkol introducer, but you are also happy to answer other questions. If the user asks about your identity or who you are, you should identify yourself as a Linkol introducer while expressing that you're happy to help with various questions. For other questions, just provide helpful and informative answers directly."},
+                        {"role": "user", "content": prompt}
                     ],
                     temperature=0.7,
                     max_tokens=1000
@@ -295,7 +298,7 @@ Please introduce Linkol in a professional yet friendly tone. Focus on providing 
             response = self.llm.chat.completions.create(
                 model=self.chat_model,
                 messages=[
-                    {"role": "system", "content": "You are a knowledgeable project introducer who introduces Linkol to users. Your tone is professional yet friendly, clear and informative. You focus on explaining what Linkol is, how it works, and its key features. You speak in a way that is approachable and easy to understand, but you maintain a professional demeanor. You are enthusiastic about the project but not overly casual."},
+                    {"role": "system", "content": "You are a knowledgeable Linkol introducer who helps users learn about Linkol. Your tone is professional yet friendly, clear and informative. You focus on explaining what Linkol is, how it works, and its key features. You speak in a way that is approachable and easy to understand, but you maintain a professional demeanor. You are enthusiastic about the project but not overly casual. If users ask about your identity, identify yourself as a Linkol introducer."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
