@@ -36,9 +36,68 @@ class LinkolAgent:
         )
         self.chat_model = settings.chat_model
     
+    def _has_valuation_intent_for_user(self, user_question: str) -> bool:
+        """
+        Check if user's question has intent to get valuation for a specific user.
+        
+        Args:
+            user_question: User's question
+            
+        Returns:
+            True if user wants to get valuation for a specific user, False otherwise
+        """
+        question_lower = user_question.lower()
+        
+        # Valuation keywords
+        valuation_keywords = [
+            "估值", "价格", "价钱", "多少钱", "值多少", "valuation", 
+            "price", "pricing", "cost", "worth", "值", "定价"
+        ]
+        
+        # Check if question contains valuation keywords
+        has_valuation = any(keyword in question_lower for keyword in valuation_keywords)
+        
+        if not has_valuation:
+            return False
+        
+        # Use LLM to determine if user wants valuation for a specific user
+        try:
+            prompt = f"""Analyze if the user's question is asking for valuation/price of a SPECIFIC Twitter user (not general valuation).
+
+User question: {user_question}
+
+Respond with only "yes" if the user is asking for a specific user's valuation, or "no" if they're asking for general valuation information.
+
+Examples:
+- "@username 的估值" -> yes
+- "vis_eth 的价格" -> yes  
+- "KOL估值是多少" -> no
+- "热门KOL的估值" -> no"""
+
+            response = self.llm.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that analyzes user intent. Respond with only 'yes' or 'no'."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=10
+            )
+            
+            answer = response.choices[0].message.content.strip().lower()
+            has_specific_intent = "yes" in answer
+            
+            logger.debug(f"LLM determined valuation intent for specific user: {has_specific_intent}")
+            return has_specific_intent
+        except Exception as e:
+            logger.error(f"Error in LLM valuation intent check: {e}")
+            # Fallback: assume true if has valuation keywords
+            return has_valuation
+    
     def _extract_screen_name(self, user_question: str) -> Optional[str]:
         """
         Extract Twitter screen name from user question.
+        First tries regex, then falls back to LLM extraction if regex fails.
         
         Args:
             user_question: User's question
@@ -48,8 +107,8 @@ class LinkolAgent:
         """
         import re
         
+        # Step 1: Try regex extraction first
         # Pattern to match @username (only alphanumeric and underscore, stop at non-word characters)
-        # Match @ followed by word characters, but stop at spaces, punctuation, or Chinese characters
         pattern = r'@([a-zA-Z0-9_]+)'
         matches = re.findall(pattern, user_question)
         
@@ -59,21 +118,26 @@ class LinkolAgent:
             return screen_name
         
         # Check if question mentions a specific username pattern without @
-        # e.g., "vis_eth 的估值", "dada81505550664的价格"
-        # Use more precise pattern matching
+        # e.g., "vis_eth 的估值", "dada81505550664的价格", "为dada81505550664估价"
         question_lower = user_question.lower()
         
         # Try to find username pattern before valuation keywords
-        # Match alphanumeric + underscore that appears before valuation keywords
-        username_pattern = r'([a-zA-Z0-9_]+)\s*[的]?\s*(?:估值|价格|价钱|price|valuation|值多少钱)'
-        match = re.search(username_pattern, question_lower, re.IGNORECASE)
-        if match:
-            potential_name = match.group(1)
-            if len(potential_name) > 2 and re.match(r'^[a-zA-Z0-9_]+$', potential_name):
-                logger.debug(f"Extracted potential screen name from text: {potential_name}")
-                return potential_name
+        # Match patterns like: "username 的估值", "username 的价格", "为username估价"
+        username_patterns = [
+            r'([a-zA-Z0-9_]+)\s*[的]?\s*(?:估值|价格|价钱|price|valuation|值多少钱)',  # "username 的估值"
+            r'为\s*([a-zA-Z0-9_]+)\s*(?:估值|估价|价格|价钱)',  # "为username估价"
+            r'(?:给|为|查)\s*([a-zA-Z0-9_]+)\s*(?:的)?\s*(?:估值|估价|价格|价钱)',  # "给username估价"
+        ]
         
-        # Fallback: try to extract from beginning of question before valuation keywords
+        for username_pattern in username_patterns:
+            match = re.search(username_pattern, user_question, re.IGNORECASE)
+            if match:
+                potential_name = match.group(1)
+                if len(potential_name) > 2 and re.match(r'^[a-zA-Z0-9_]+$', potential_name):
+                    logger.debug(f"Extracted potential screen name from text: {potential_name}")
+                    return potential_name
+        
+        # Fallback regex: try to extract from beginning of question before valuation keywords
         valuation_keywords = ["估值", "价格", "价钱", "price", "valuation", "值多少钱", "现在的估值"]
         for keyword in valuation_keywords:
             if keyword in question_lower:
@@ -87,6 +151,60 @@ class LinkolAgent:
                     if re.match(r'^[a-zA-Z0-9_]+$', part_clean) and len(part_clean) > 2:
                         logger.debug(f"Extracted screen name from fallback: {part_clean}")
                         return part_clean
+        
+        # Step 2: If regex failed, check if user has valuation intent for a specific user
+        has_specific_intent = self._has_valuation_intent_for_user(user_question)
+        if not has_specific_intent:
+            logger.debug("No specific user valuation intent detected, skipping LLM extraction")
+            return None
+        
+        # Step 3: Use LLM to extract screen name
+        logger.info("Regex extraction failed, using LLM to extract screen name")
+        try:
+            prompt = f"""Extract the Twitter username (screen name) from the user's question. 
+The username should be without @ symbol. Return only the username, nothing else.
+
+User question: {user_question}
+
+Examples:
+- "你知道@vis_eth现在的估值吗？" -> vis_eth
+- "vis_eth 的估值是多少" -> vis_eth
+- "我想知道 dada81505550664 的价格" -> dada81505550664
+- "KOL估值是多少" -> (no username, return empty)
+
+Return only the username if found, or return "none" if no username is mentioned."""
+
+            response = self.llm.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that extracts Twitter usernames. Return only the username (without @) or 'none' if no username is found."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=50
+            )
+            
+            answer = response.choices[0].message.content.strip()
+            
+            # Clean the answer - remove quotes, whitespace, and check if it's valid
+            answer = answer.strip('"\'`').strip()
+            
+            # Check if LLM said "none" or similar
+            if answer.lower() in ["none", "no", "n/a", "not found", ""]:
+                logger.debug("LLM determined no username found")
+                return None
+            
+            # Validate extracted username (alphanumeric + underscore, reasonable length)
+            if re.match(r'^[a-zA-Z0-9_]+$', answer) and 2 <= len(answer) <= 50:
+                logger.info(f"LLM extracted screen name: {answer}")
+                return answer
+            else:
+                logger.warning(f"LLM extracted invalid username format: {answer}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error in LLM screen name extraction: {e}")
+            return None
         
         return None
     
@@ -121,15 +239,23 @@ class LinkolAgent:
         is_valuation_query = any(keyword in question_lower for keyword in valuation_keywords)
         
         if is_valuation_query:
-            # Try to extract specific screen name
+            # Try to extract specific screen name FIRST before classifying
             screen_name = self._extract_screen_name(user_question)
             
             if screen_name:
                 logger.info(f"Detected valuation_specific intent for @{screen_name}")
                 return ("valuation_specific", screen_name)
             else:
-                logger.info("Detected valuation_general intent")
-                return ("valuation_general", None)
+                # If no screen name extracted, double-check with intent analysis
+                # This helps distinguish between general valuation queries and specific ones we couldn't extract
+                has_specific_intent = self._has_valuation_intent_for_user(user_question)
+                if has_specific_intent:
+                    # User wants specific user but we couldn't extract - try LLM extraction again
+                    logger.info("Detected specific user valuation intent but regex failed, will use LLM extraction in query handler")
+                    return ("valuation_specific", None)  # Will be extracted again in query handler
+                else:
+                    logger.info("Detected valuation_general intent")
+                    return ("valuation_general", None)
         
         # Data query keywords (need API data)
         data_query_keywords = [
@@ -422,13 +548,18 @@ Respond with only "yes" or "no"."""
             # For specific user valuation queries, directly call API
             logger.info(f"Processing valuation_specific intent for @{screen_name}")
             
+            # If screen_name is None, try to extract it using LLM
             if not screen_name:
-                return {
-                    "answer": "抱歉，无法识别您要查询的 Twitter 用户名。请使用 @用户名 的格式，例如：@username 的估值。",
-                    "sources": [],
-                    "kol_data": None,
-                    "num_sources": 0
-                }
+                logger.info("Screen name not extracted yet, trying LLM extraction")
+                screen_name = self._extract_screen_name(user_question)
+                
+                if not screen_name:
+                    return {
+                        "answer": "抱歉，无法识别您要查询的 Twitter 用户名。请使用 @用户名 或 \"用户名 的估值\" 的格式，例如：@username 的估值，或 dada81505550664 的估值。",
+                        "sources": [],
+                        "kol_data": None,
+                        "num_sources": 0
+                    }
             
             # Get price for specific screen name
             logger.info(f"Fetching price for @{screen_name}...")
