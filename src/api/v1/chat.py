@@ -2,8 +2,9 @@
 
 from fastapi import APIRouter, HTTPException, Depends
 from src.agents.rag_agent import RAGAgent
+from src.agents.linkol_agent import LinkolAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
-from src.api.dependencies import get_rag_agent
+from src.api.dependencies import get_rag_agent, get_linkol_agent
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -63,5 +64,60 @@ async def chat(
         
     except Exception as e:
         logger.error(f"Error processing chat request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/linkol", response_model=ChatResponse)
+async def chat_linkol(
+    request: ChatRequest,
+    linkol_agent: LinkolAgent = Depends(get_linkol_agent),
+):
+    """
+    Chat with the Linkol agent.
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "your question about Linkol or KOL"}
+        ],
+        "top_k": 5  // Optional, number of documents to retrieve
+    }
+    
+    The agent will automatically:
+    1. Analyze if the question is related to Linkol, KOL, or Twitter influencers
+    2. If related, search for Linkol-related content in project_content
+    3. Get top-ranked KOL and their price from Linkol API
+    4. Generate response combining content and KOL data
+    
+    If the question is not Linkol-related, it will return a message asking
+    the user to ask about Linkol-related topics.
+    """
+    try:
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        logger.info(f"Linkol chat request received: query='{user_query[:100]}...', model={request.model}")
+        
+        result = await linkol_agent.query(
+            user_question=user_query,
+            top_k=request.top_k
+        )
+        
+        logger.info(f"Linkol chat response generated successfully")
+        
+        # Format response in OpenAI-compatible format
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing Linkol chat request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 

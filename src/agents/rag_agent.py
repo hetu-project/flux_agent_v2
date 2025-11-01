@@ -204,14 +204,14 @@ class RAGAgent:
 
 User question: {user_question}
 
-Provide a helpful answer based on the project info and relevant content. If the information is insufficient, say so."""
+Please provide a helpful answer based on the project info and relevant content above. Additionally, please search Twitter for relevant tweets, discussions, or updates about this project and incorporate that information into your answer. Use your Twitter search capability to find the most relevant and recent tweets that can help answer the user's question. If the information from the database and Twitter is insufficient, please say so."""
         else:
             # Directly send question to LLM without project context
             prompt = f"""Please answer the user's question.
 
 User question: {user_question}
 
-Provide a helpful, concise answer."""
+Please provide a helpful, concise answer. Please search Twitter for relevant tweets and incorporate that information into your answer. Use your Twitter search capability to find the most relevant information."""
         
         # 6. Generate answer using LLM
         logger.debug(f"Generating LLM response (model: {self.chat_model})")

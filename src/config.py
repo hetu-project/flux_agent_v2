@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     aihubmix_api_key: str = ""
     aihubmix_base_url: str = "https://aihubmix.com/v1"
     embedding_model: str = "text-embedding-ada-002"
-    chat_model: str = "DeepSeek-V3.2-Exp"
+    chat_model: str = "grok-code-fast-1"
     
     # Twitter API (从环境变量读取)
     twitter_bearer_token: str = ""

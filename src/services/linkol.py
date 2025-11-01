@@ -22,6 +22,7 @@ class LinkolService:
     
     async def get_kol_price(
         self,
+        screen_name: str,
         page: Optional[int] = None,
         size: Optional[int] = None
     ) -> Dict[str, Any]:
@@ -31,6 +32,7 @@ class LinkolService:
         This endpoint calculates the price based on the KOL's last 20 original tweets.
         
         Args:
+            screen_name: KOL screen name (without @, e.g., "vis_eth")
             page: Page number (optional)
             size: Maximum items per page (optional)
             
@@ -46,7 +48,9 @@ class LinkolService:
         """
         url = f"{self.base_url}/open/api/v1/kol/price/"
         
-        params = {}
+        params = {
+            "screen_name": screen_name
+        }
         if page is not None:
             params["page"] = page
         if size is not None:
