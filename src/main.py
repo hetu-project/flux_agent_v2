@@ -19,6 +19,7 @@ from src.repositories.collection_repository import CollectionRepository
 from src.repositories.project_repository import ProjectRepository
 from src.repositories.project_content_repository import ProjectContentRepository
 from src.agents.linkol_agent import LinkolAgent
+from src.agents.hetu_agent import HetuAgent
 
 # Import API routes
 from src.api.v1 import projects, tweets, chat, collections, project_content
@@ -73,6 +74,12 @@ linkol_agent = LinkolAgent(
     project_content_repo=project_content_repo
 )
 
+# Initialize Hetu agent with project repository and project content repository
+hetu_agent = HetuAgent(
+    project_repo=project_repo,
+    project_content_repo=project_content_repo
+)
+
 # Initialize repositories
 tweet_repo = TweetRepository(qdrant_service, collection_name="twitter_tweets")
 collection_repo = CollectionRepository(qdrant_service)
@@ -95,6 +102,7 @@ set_dependencies(
     embedding_service=embedding_service,
     rag_agent=rag_agent,
     linkol_agent=linkol_agent,
+    hetu_agent=hetu_agent,
     collection_repo=collection_repo,
 )
 logger.info("Dependencies set successfully")

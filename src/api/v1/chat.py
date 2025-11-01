@@ -3,8 +3,9 @@
 from fastapi import APIRouter, HTTPException, Depends
 from src.agents.rag_agent import RAGAgent
 from src.agents.linkol_agent import LinkolAgent
+from src.agents.hetu_agent import HetuAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
-from src.api.dependencies import get_rag_agent, get_linkol_agent
+from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -119,5 +120,58 @@ async def chat_linkol(
         
     except Exception as e:
         logger.error(f"Error processing Linkol chat request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/hetu", response_model=ChatResponse)
+async def chat_hetu(
+    request: ChatRequest,
+    hetu_agent: HetuAgent = Depends(get_hetu_agent),
+):
+    """
+    Chat with the Hetu Protocol agent.
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "your question about Hetu Protocol"}
+        ],
+        "top_k": 5  // Optional, number of documents to retrieve
+    }
+    
+    The agent is specialized in answering questions about Hetu Protocol.
+    It will:
+    1. Always use Hetu Protocol project information from database
+    2. Search for relevant content related to Hetu Protocol
+    3. Search Twitter for recent tweets about Hetu Protocol (especially from 2025)
+    4. Generate response as a Hetu Protocol introducer
+    """
+    try:
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        logger.info(f"Hetu chat request received: query='{user_query[:100]}...', model={request.model}")
+        
+        result = await hetu_agent.query(
+            user_question=user_query,
+            top_k=request.top_k
+        )
+        
+        logger.info(f"Hetu chat response generated successfully")
+        
+        # Format response in OpenAI-compatible format
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing Hetu chat request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
