@@ -104,6 +104,64 @@ class RAGAgent:
             logger.error(f"Error finding project: {e}")
             return None
     
+    def _check_parallel_universe_count_intent(self, user_question: str) -> bool:
+        """
+        Check if user's question is asking about the number/count of parallel universe projects.
+        
+        Uses keyword matching to detect questions about parallel network count, project count, etc.
+        
+        Args:
+            user_question: User's question
+            
+        Returns:
+            True if user is asking about project count, False otherwise
+        """
+        question_lower = user_question.lower()
+        
+        # Keywords related to counting projects
+        count_keywords = [
+            "数量", "多少", "几个", "count", "number", "how many",
+            "平行网", "parallel", "projects", "项目数量",
+            "有多少", "total", "共", "总共有"
+        ]
+        
+        # Check if question contains count-related keywords
+        has_count_keyword = any(keyword in question_lower for keyword in count_keywords)
+        
+        if not has_count_keyword:
+            return False
+        
+        # Additional check: question should be related to projects/parallel universe
+        project_related_keywords = [
+            "平行网", "parallel", "project", "项目", "universe",
+            "network", "生态系统", "ecosystem"
+        ]
+        
+        has_project_keyword = any(keyword in question_lower for keyword in project_related_keywords)
+        
+        return has_project_keyword
+    
+    def _get_project_count(self) -> int:
+        """
+        Get the total number of projects in the database.
+        
+        Returns:
+            Total number of projects
+        """
+        try:
+            if not self.project_repo:
+                logger.debug("Project repository not available")
+                return 0
+            
+            # Use project repository to get all projects and count
+            all_projects = self.project_repo.get_all()
+            count = len(all_projects)
+            logger.info(f"Found {count} projects in database")
+            return count
+        except Exception as e:
+            logger.error(f"Error getting project count: {e}")
+            return 0
+    
     async def query(
         self,
         user_question: str,
@@ -114,11 +172,12 @@ class RAGAgent:
         Query the agent with a question.
         
         Logic:
-        1. Search for matching projects in database using vector similarity
+        1. Check if user is asking about parallel universe project count
+        2. Search for matching projects in database using vector similarity
            - Only matches if user question mentions project name or has high similarity (>= 0.75)
            - Uses stricter similarity threshold (0.6) to ensure relevance
-        2. If project found with sufficient similarity, include project info in the prompt
-        3. If project not found or similarity too low, answer question directly without project context
+        3. If project found with sufficient similarity, include project info in the prompt
+        4. If project not found or similarity too low, answer question directly without project context
         
         Args:
             user_question: User's question
@@ -129,7 +188,29 @@ class RAGAgent:
             Agent response with answer and sources
         """
         logger.info(f"Processing query: {user_question[:100]}...")
-        # 1. Try to find a matching project in database
+        
+        # 1. Check if user is asking about parallel universe project count
+        if self._check_parallel_universe_count_intent(user_question):
+            logger.info("Detected parallel universe count intent")
+            project_count = self._get_project_count()
+            
+            if project_count > 0:
+                answer = f"Currently, there are {project_count} projects in the Hetu Parallel Universe ecosystem. The Hetu Parallel Universe is an ecosystem built by HETU using the FLUX points system, consisting of multiple parallel network projects that work together to create a decentralized intelligence economy."
+                
+                return {
+                    "answer": answer,
+                    "sources": [],
+                    "num_sources": 0,
+                    "project_count": project_count
+                }
+            else:
+                return {
+                    "answer": "I'm unable to retrieve the current number of projects in the Hetu Parallel Universe. The database connection may be unavailable. Please try again later.",
+                    "sources": [],
+                    "num_sources": 0
+                }
+        
+        # 2. Try to find a matching project in database
         # We use vector search to find projects - if a project is found with sufficient similarity,
         # it means the user's question is about a specific project
         found_project = None
