@@ -35,6 +35,177 @@ class LinkolAgent:
             base_url=settings.aihubmix_base_url
         )
         self.chat_model = settings.chat_model
+        self._cached_project_names: Optional[List[str]] = None
+    
+    def _get_all_project_names(self) -> List[str]:
+        """
+        Get all unique project names from the database.
+        Caches the result to avoid repeated queries.
+        
+        Returns:
+            List of project names (excluding "Linkol")
+        """
+        # Return cached result if available
+        if self._cached_project_names is not None:
+            return self._cached_project_names
+        
+        try:
+            if not self.project_content_repo:
+                logger.debug("Project content repository not available, cannot get project names")
+                self._cached_project_names = []
+                return []
+            
+            # Use Qdrant client directly to get all unique project names
+            collection_name = "project_content"
+            
+            # Scroll through all points to get unique project names
+            project_names = set()
+            offset = None
+            
+            while True:
+                result = self.qdrant.client.scroll(
+                    collection_name=collection_name,
+                    limit=100,
+                    offset=offset
+                )
+                
+                points, next_offset = result
+                
+                if not points:
+                    break
+                
+                # Extract unique project names
+                for point in points:
+                    payload = point.payload
+                    project_name = payload.get("project_name")
+                    if project_name and project_name != "Linkol":
+                        project_names.add(project_name)
+                
+                # Check if we've reached the end
+                if next_offset is None:
+                    break
+                offset = next_offset
+            
+            project_names_list = list(project_names)
+            self._cached_project_names = project_names_list
+            logger.debug(f"Found {len(project_names_list)} unique project names: {project_names_list}")
+            return project_names_list
+            
+        except Exception as e:
+            logger.error(f"Error getting project names: {e}")
+            self._cached_project_names = []
+            return []
+    
+    def _check_for_other_projects(self, user_question: str) -> Optional[str]:
+        """
+        Check if user's question mentions other projects (excluding Linkol) using vector similarity search.
+        
+        Uses vector embedding to find semantically similar projects rather than simple string matching.
+        
+        Args:
+            user_question: User's question
+            
+        Returns:
+            Name of mentioned project if found with high similarity, None otherwise
+        """
+        try:
+            # Use vector similarity search instead of string matching
+            # Search in project_content collection to find projects with high semantic similarity
+            
+            if not self.project_content_repo:
+                logger.debug("Project content repository not available")
+                return None
+            
+            # Get all unique project names (excluding Linkol) using vector search
+            # Search for content that matches the user question semantically
+            # We'll search with a filter to exclude Linkol and see what other projects match
+            
+            from qdrant_client.http.models import Filter, FieldCondition, MatchValue, MatchAny
+            
+            # Get all project names first
+            project_names = self._get_all_project_names()
+            if not project_names:
+                logger.debug("No other projects found in database")
+                return None
+            
+            # Use vector search to find the most semantically similar project content
+            # Search across all projects except Linkol
+            try:
+                # Generate embedding for user question
+                query_vector = self.embedding.embed_text(user_question)
+                
+                # Create filter to exclude Linkol and only search other projects
+                filter_query = Filter(
+                    must=[
+                        FieldCondition(
+                            key="project_name",
+                            match=MatchAny(any=project_names)  # Only search non-Linkol projects
+                        )
+                    ]
+                )
+                
+                # Search for most similar content
+                results = self.qdrant.search(
+                    collection_name="project_content",
+                    query_vector=query_vector,
+                    limit=5,  # Top 5 results
+                    filter_query=filter_query
+                )
+                
+                if not results:
+                    logger.debug("No similar project content found for user question")
+                    return None
+                
+                # Filter results by minimum similarity threshold (0.7 for cosine similarity)
+                min_score = 0.7
+                filtered_results = [r for r in results if r.score >= min_score]
+                
+                if not filtered_results:
+                    logger.debug(f"Top result score: {results[0].score:.3f} (below threshold {min_score})")
+                    return None
+                
+                # Get the top result and check its project name
+                top_result = filtered_results[0]
+                top_project = top_result.payload.get("project_name")
+                
+                # Only return if project is not Linkol (already filtered out by filter_query, but double-check)
+                if top_project and top_project != "Linkol":
+                    logger.info(f"Detected semantically similar project: {top_project} (score: {top_result.score:.3f})")
+                    return top_project
+                
+                logger.debug(f"Top result project: {top_project} (ignored)")
+                return None
+                
+            except Exception as e:
+                logger.error(f"Error in vector search for projects: {e}")
+                # Fallback to string matching if vector search fails
+                if project_names:
+                    return self._check_for_other_projects_fallback(user_question, list(project_names))
+                return None
+            
+        except Exception as e:
+            logger.error(f"Error checking for other projects: {e}")
+            return None
+    
+    def _check_for_other_projects_fallback(self, user_question: str, project_names: List[str]) -> Optional[str]:
+        """
+        Fallback method using simple string matching if vector search fails.
+        
+        Args:
+            user_question: User's question
+            project_names: List of project names to check
+            
+        Returns:
+            Name of mentioned project if found, None otherwise
+        """
+        question_lower = user_question.lower()
+        
+        for project_name in project_names:
+            if project_name.lower() in question_lower:
+                logger.info(f"Detected mention of other project (fallback): {project_name}")
+                return project_name
+        
+        return None
     
     def _has_valuation_intent_for_user(self, user_question: str) -> bool:
         """
@@ -508,6 +679,17 @@ Respond with only "yes" or "no"."""
             Agent response with answer, sources, and KOL data
         """
         logger.info(f"Processing Linkol query: {user_question[:100]}...")
+        
+        # Check if user's question mentions other projects using vector similarity
+        other_project = self._check_for_other_projects(user_question)
+        if other_project:
+            logger.info(f"User question mentions other project: {other_project}")
+            return {
+                "answer": f"Questions about {other_project} should be directed to our parallel universe agent. Please visit the parallel universe agent for queries regarding {other_project}.",
+                "sources": [],
+                "kol_data": None,
+                "num_sources": 0
+            }
         
         # Part 1: Intent classification
         intent, screen_name = self._classify_intent(user_question)
