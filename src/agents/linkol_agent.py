@@ -26,7 +26,7 @@ class LinkolAgent:
         self.project_content_repo = project_content_repo
         self.linkol_service = LinkolService()
         
-        # Initialize LLM client with AIHubMix
+        # Initialize default LLM client with AIHubMix
         if not settings.aihubmix_api_key:
             raise ValueError("AIHUBMIX_API_KEY is required. Please set it in .env file or environment variables.")
         
@@ -36,6 +36,29 @@ class LinkolAgent:
         )
         self.chat_model = settings.chat_model
         self._cached_project_names: Optional[List[str]] = None
+    
+    def _get_llm_client(self, api_key: Optional[str] = None, base_url: Optional[str] = None) -> OpenAI:
+        """
+        Get LLM client with optional API key and base URL.
+        If provided, uses OpenRouter; otherwise uses default AIHubMix.
+        
+        Args:
+            api_key: Optional API key (if provided, uses OpenRouter)
+            base_url: Optional base URL (if provided, uses this URL)
+            
+        Returns:
+            OpenAI client instance
+        """
+        if api_key:
+            # Use OpenRouter if API key is provided
+            client_base_url = base_url or settings.openrouter_base_url
+            return OpenAI(
+                api_key=api_key,
+                base_url=client_base_url
+            )
+        else:
+            # Use default AIHubMix
+            return self.llm
     
     def _get_all_project_names(self) -> List[str]:
         """
@@ -207,7 +230,7 @@ class LinkolAgent:
         
         return None
     
-    def _has_valuation_intent_for_user(self, user_question: str) -> bool:
+    def _has_valuation_intent_for_user(self, user_question: str, llm_client: Optional[OpenAI] = None, model_name: Optional[str] = None) -> bool:
         """
         Check if user's question has intent to get valuation for a specific user.
         
@@ -233,6 +256,8 @@ class LinkolAgent:
         
         # Use LLM to determine if user wants valuation for a specific user
         try:
+            llm = llm_client if llm_client else self.llm
+            model = model_name if model_name else self.chat_model
             prompt = f"""Analyze if the user's question is asking for valuation/price of a SPECIFIC Twitter user (not general valuation).
 
 User question: {user_question}
@@ -245,8 +270,8 @@ Examples:
 - "KOL估值是多少" -> no
 - "热门KOL的估值" -> no"""
 
-            response = self.llm.chat.completions.create(
-                model=self.chat_model,
+            response = llm.chat.completions.create(
+                model=model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that analyzes user intent. Respond with only 'yes' or 'no'."},
                     {"role": "user", "content": prompt}
@@ -265,7 +290,7 @@ Examples:
             # Fallback: assume true if has valuation keywords
             return has_valuation
     
-    def _extract_screen_name(self, user_question: str) -> Optional[str]:
+    def _extract_screen_name(self, user_question: str, llm_client: Optional[OpenAI] = None, model_name: Optional[str] = None) -> Optional[str]:
         """
         Extract Twitter screen name from user question.
         First tries regex, then falls back to LLM extraction if regex fails.
@@ -324,7 +349,7 @@ Examples:
                         return part_clean
         
         # Step 2: If regex failed, check if user has valuation intent for a specific user
-        has_specific_intent = self._has_valuation_intent_for_user(user_question)
+        has_specific_intent = self._has_valuation_intent_for_user(user_question, llm_client=llm_client, model_name=model_name)
         if not has_specific_intent:
             logger.debug("No specific user valuation intent detected, skipping LLM extraction")
             return None
@@ -332,6 +357,8 @@ Examples:
         # Step 3: Use LLM to extract screen name
         logger.info("Regex extraction failed, using LLM to extract screen name")
         try:
+            llm = llm_client if llm_client else self.llm
+            model = model_name if model_name else self.chat_model
             prompt = f"""Extract the Twitter username (screen name) from the user's question. 
 The username should be without @ symbol. Return only the username, nothing else.
 
@@ -345,8 +372,8 @@ Examples:
 
 Return only the username if found, or return "none" if no username is mentioned."""
 
-            response = self.llm.chat.completions.create(
-                model=self.chat_model,
+            response = llm.chat.completions.create(
+                model=model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that extracts Twitter usernames. Return only the username (without @) or 'none' if no username is found."},
                     {"role": "user", "content": prompt}
@@ -379,7 +406,7 @@ Return only the username if found, or return "none" if no username is mentioned.
         
         return None
     
-    def _classify_intent(self, user_question: str) -> tuple[str, Optional[str]]:
+    def _classify_intent(self, user_question: str, llm_client: Optional[OpenAI] = None, model_name: Optional[str] = None) -> tuple[str, Optional[str]]:
         """
         Classify user's question intent for Linkol-related queries.
         
@@ -396,7 +423,7 @@ Return only the username if found, or return "none" if no username is mentioned.
         question_lower = user_question.lower()
         
         # Check if related to Linkol first
-        is_related = self._is_linkol_related(user_question)
+        is_related = self._is_linkol_related(user_question, llm_client=llm_client, model_name=model_name)
         if not is_related:
             return ("unrelated", None)
         
@@ -411,7 +438,7 @@ Return only the username if found, or return "none" if no username is mentioned.
         
         if is_valuation_query:
             # Try to extract specific screen name FIRST before classifying
-            screen_name = self._extract_screen_name(user_question)
+            screen_name = self._extract_screen_name(user_question, llm_client=llm_client, model_name=model_name)
             
             if screen_name:
                 logger.info(f"Detected valuation_specific intent for @{screen_name}")
@@ -419,7 +446,7 @@ Return only the username if found, or return "none" if no username is mentioned.
             else:
                 # If no screen name extracted, double-check with intent analysis
                 # This helps distinguish between general valuation queries and specific ones we couldn't extract
-                has_specific_intent = self._has_valuation_intent_for_user(user_question)
+                has_specific_intent = self._has_valuation_intent_for_user(user_question, llm_client=llm_client, model_name=model_name)
                 if has_specific_intent:
                     # User wants specific user but we couldn't extract - try LLM extraction again
                     logger.info("Detected specific user valuation intent but regex failed, will use LLM extraction in query handler")
@@ -467,6 +494,8 @@ Return only the username if found, or return "none" if no username is mentioned.
         
         # Use LLM for more nuanced classification
         try:
+            llm = llm_client if llm_client else self.llm
+            model = model_name if model_name else self.chat_model
             prompt = f"""Classify the user's question about Linkol into one of these categories:
 1. "valuation_specific" - User asks about valuation/price of a specific Twitter user (e.g., "@username 的估值", "what is @user's price")
 2. "valuation_general" - User asks about valuations/prices in general (e.g., "KOL估值是多少", "how much do KOLs cost")
@@ -479,8 +508,8 @@ User question: {user_question}
 
 Respond with only one word: valuation_specific, valuation_general, data_query, action, introduction, or general."""
             
-            response = self.llm.chat.completions.create(
-                model=self.chat_model,
+            response = llm.chat.completions.create(
+                model=model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that classifies user intent. Respond with only one word: valuation_specific, valuation_general, data_query, action, introduction, or general."},
                     {"role": "user", "content": prompt}
@@ -501,7 +530,7 @@ Respond with only one word: valuation_specific, valuation_general, data_query, a
                 logger.info(f"LLM classified intent: {intent}")
                 # If valuation intent, try to extract screen name
                 if intent == "valuation_specific" or "valuation" in answer:
-                    screen_name = self._extract_screen_name(user_question)
+                    screen_name = self._extract_screen_name(user_question, llm_client=llm_client, model_name=model_name)
                     if screen_name:
                         return (intent, screen_name) if intent == "valuation_specific" else ("valuation_specific", screen_name)
                     else:
@@ -514,7 +543,7 @@ Respond with only one word: valuation_specific, valuation_general, data_query, a
             logger.error(f"Error in LLM intent classification: {e}")
             return ("general", None)
     
-    def _is_linkol_related(self, user_question: str) -> bool:
+    def _is_linkol_related(self, user_question: str, llm_client: Optional[OpenAI] = None, model_name: Optional[str] = None) -> bool:
         """
         Analyze if user's question is related to Linkol.
         
@@ -543,14 +572,16 @@ Respond with only one word: valuation_specific, valuation_general, data_query, a
         
         # Use LLM for more nuanced intent detection
         try:
+            llm = llm_client if llm_client else self.llm
+            model = model_name if model_name else self.chat_model
             prompt = f"""Analyze if the following user question is related to Linkol, KOL (Key Opinion Leader), Twitter influencers, or social media influencer pricing.
 
 User question: {user_question}
 
 Respond with only "yes" or "no"."""
             
-            response = self.llm.chat.completions.create(
-                model=self.chat_model,
+            response = llm.chat.completions.create(
+                model=model,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that analyzes user intent. Respond with only 'yes' or 'no'."},
                     {"role": "user", "content": prompt}
@@ -659,7 +690,9 @@ Respond with only "yes" or "no"."""
     async def query(
         self,
         user_question: str,
-        top_k: int = 5
+        top_k: int = 5,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Query the Linkol agent with intelligent intent classification.
@@ -674,11 +707,18 @@ Respond with only "yes" or "no"."""
         Args:
             user_question: User's question
             top_k: Number of relevant documents to retrieve
+            api_key: Optional API key (if provided, uses OpenRouter)
+            base_url: Optional base URL (if provided, uses this URL)
             
         Returns:
             Agent response with answer, sources, and KOL data
         """
         logger.info(f"Processing Linkol query: {user_question[:100]}...")
+        
+        # Get LLM client (OpenRouter if api_key provided, otherwise AIHubMix)
+        llm_client = self._get_llm_client(api_key=api_key, base_url=base_url)
+        # Select model based on API provider
+        model_name = settings.openrouter_model if api_key else self.chat_model
         
         # Check if user's question mentions other projects using vector similarity
         other_project = self._check_for_other_projects(user_question)
@@ -692,7 +732,7 @@ Respond with only "yes" or "no"."""
             }
         
         # Part 1: Intent classification
-        intent, screen_name = self._classify_intent(user_question)
+        intent, screen_name = self._classify_intent(user_question, llm_client=llm_client, model_name=model_name)
         logger.info(f"Classified intent: {intent}, screen_name: {screen_name}")
         
         # If not related to Linkol, directly use LLM to answer
@@ -702,8 +742,8 @@ Respond with only "yes" or "no"."""
                 # Build prompt with identity handling
                 prompt = user_question
                 
-                response = self.llm.chat.completions.create(
-                    model=self.chat_model,
+                response = llm_client.chat.completions.create(
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant for Linkol. You are a Linkol introducer, but you are also happy to answer other questions. If the user asks about your identity or who you are, you should identify yourself as a Linkol introducer while expressing that you're happy to help with various questions. For other questions, just provide helpful and informative answers directly."},
                         {"role": "user", "content": prompt}
@@ -733,7 +773,7 @@ Respond with only "yes" or "no"."""
             # If screen_name is None, try to extract it using LLM
             if not screen_name:
                 logger.info("Screen name not extracted yet, trying LLM extraction")
-                screen_name = self._extract_screen_name(user_question)
+                screen_name = self._extract_screen_name(user_question, llm_client=llm_client, model_name=model_name)
                 
                 if not screen_name:
                     return {
@@ -1115,11 +1155,11 @@ Respond with only "yes" or "no"."""
                 logger.info("No database content found, prompting LLM to search Twitter")
                 prompt = f"""The user is asking: {user_question}
 
-We don't have relevant information in our database about this topic. Please search Twitter for relevant information about Linkol to help answer the user's question. Use your Twitter search capability to find recent tweets, discussions, or updates about Linkol that can help answer this question. Then provide a helpful answer based on what you find."""
+We don't have relevant information in our database about this topic. Please search Twitter for relevant information about Linkol to help answer the user's question. Use your Twitter search capability to find recent tweets, discussions, or updates about Linkol that can help answer this question. Prioritize tweets from September 2025 onwards for the most current information. Then provide a helpful answer based on what you find."""
 
                 try:
-                    response = self.llm.chat.completions.create(
-                        model=self.chat_model,
+                    response = llm_client.chat.completions.create(
+                        model=model_name,
                         messages=[
                             {"role": "system", "content": "You are a knowledgeable Linkol introducer who helps users. If database information is insufficient, use your Twitter search capability to find relevant information and provide helpful answers."},
                             {"role": "user", "content": prompt}
@@ -1158,8 +1198,8 @@ User question: {user_question}
 Please provide a helpful and informative answer based on the content above."""
                 
                 try:
-                    response = self.llm.chat.completions.create(
-                        model=self.chat_model,
+                    response = llm_client.chat.completions.create(
+                        model=model_name,
                         messages=[
                             {"role": "system", "content": "You are a knowledgeable Linkol introducer who helps users. Provide clear and helpful answers."},
                             {"role": "user", "content": prompt}
@@ -1244,10 +1284,10 @@ User question: {user_question}
 
 Please introduce Linkol in a professional yet friendly tone. Focus on providing clear, informative explanations about what Linkol is and how it works. Your tone should be approachable and easy to understand, but maintain professionalism. Think of yourself as a knowledgeable guide introducing an interesting project to someone who wants to learn about it. Incorporate the relevant content and KOL pricing information naturally into your introduction."""
 
-            logger.debug(f"Generating LLM response (model: {self.chat_model})")
+            logger.debug(f"Generating LLM response (model: {model_name})")
             try:
-                response = self.llm.chat.completions.create(
-                    model=self.chat_model,
+                response = llm_client.chat.completions.create(
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": "You are a knowledgeable Linkol introducer who helps users learn about Linkol. Your tone is professional yet friendly, clear and informative. You focus on explaining what Linkol is, how it works, and its key features. You speak in a way that is approachable and easy to understand, but you maintain a professional demeanor. You are enthusiastic about the project but not overly casual. If users ask about your identity, identify yourself as a Linkol introducer."},
                         {"role": "user", "content": prompt}

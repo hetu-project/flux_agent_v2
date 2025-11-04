@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-ada-002"
     chat_model: str = "grok-code-fast-1"
     
+    # OpenRouter Settings
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "x-ai/grok-code-fast-1"
+    
     # Twitter API (从环境变量读取)
     twitter_bearer_token: str = ""
     

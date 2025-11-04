@@ -1,6 +1,6 @@
 """Chat API routes."""
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from src.agents.rag_agent import RAGAgent
 from src.agents.linkol_agent import LinkolAgent
 from src.agents.hetu_agent import HetuAgent
@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 @router.post("", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
+    http_request: Request,
     rag_agent: RAGAgent = Depends(get_rag_agent),
 ):
     """
@@ -29,6 +30,8 @@ async def chat(
         ]
     }
     
+    Optional header: x-api-key - If provided, uses OpenRouter API instead of AIHubMix
+    
     The agent will automatically:
     1. Extract user query from the last message in messages array
     2. Search for matching projects in database
@@ -39,14 +42,18 @@ async def chat(
     If not provided, the agent will auto-detect and search for relevant projects.
     """
     try:
+        # Extract x-api-key from request headers (if provided, uses OpenRouter)
+        api_key = http_request.headers.get("x-api-key")
+        
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
-        logger.info(f"Chat request received: query='{user_query[:100]}...', project={request.project}, model={request.model}")
+        logger.info(f"Chat request received: query='{user_query[:100]}...', project={request.project}, model={request.model}, using_api={'OpenRouter' if api_key else 'AIHubMix'}")
         
         result = await rag_agent.query(
             user_question=user_query,
             project=request.project,
-            top_k=request.top_k
+            top_k=request.top_k,
+            api_key=api_key
         )
         
         logger.info(f"Chat response generated successfully")
@@ -71,6 +78,7 @@ async def chat(
 @router.post("/linkol", response_model=ChatResponse)
 async def chat_linkol(
     request: ChatRequest,
+    http_request: Request,
     linkol_agent: LinkolAgent = Depends(get_linkol_agent),
 ):
     """
@@ -85,6 +93,8 @@ async def chat_linkol(
         "top_k": 5  // Optional, number of documents to retrieve
     }
     
+    Optional header: x-api-key - If provided, uses OpenRouter API instead of AIHubMix
+    
     The agent will automatically:
     1. Analyze if the question is related to Linkol, KOL, or Twitter influencers
     2. If related, search for Linkol-related content in project_content
@@ -95,13 +105,17 @@ async def chat_linkol(
     the user to ask about Linkol-related topics.
     """
     try:
+        # Extract x-api-key from request headers (if provided, uses OpenRouter)
+        api_key = http_request.headers.get("x-api-key")
+        
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
-        logger.info(f"Linkol chat request received: query='{user_query[:100]}...', model={request.model}")
+        logger.info(f"Linkol chat request received: query='{user_query[:100]}...', model={request.model}, using_api={'OpenRouter' if api_key else 'AIHubMix'}")
         
         result = await linkol_agent.query(
             user_question=user_query,
-            top_k=request.top_k
+            top_k=request.top_k,
+            api_key=api_key
         )
         
         logger.info(f"Linkol chat response generated successfully")
@@ -126,6 +140,7 @@ async def chat_linkol(
 @router.post("/hetu", response_model=ChatResponse)
 async def chat_hetu(
     request: ChatRequest,
+    http_request: Request,
     hetu_agent: HetuAgent = Depends(get_hetu_agent),
 ):
     """
@@ -140,6 +155,8 @@ async def chat_hetu(
         "top_k": 5  // Optional, number of documents to retrieve
     }
     
+    Optional header: x-api-key - If provided, uses OpenRouter API instead of AIHubMix
+    
     The agent is specialized in answering questions about Hetu Protocol.
     It will:
     1. Always use Hetu Protocol project information from database
@@ -148,13 +165,17 @@ async def chat_hetu(
     4. Generate response as a Hetu Protocol introducer
     """
     try:
+        # Extract x-api-key from request headers (if provided, uses OpenRouter)
+        api_key = http_request.headers.get("x-api-key")
+        
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
-        logger.info(f"Hetu chat request received: query='{user_query[:100]}...', model={request.model}")
+        logger.info(f"Hetu chat request received: query='{user_query[:100]}...', model={request.model}, using_api={'OpenRouter' if api_key else 'AIHubMix'}")
         
         result = await hetu_agent.query(
             user_question=user_query,
-            top_k=request.top_k
+            top_k=request.top_k,
+            api_key=api_key
         )
         
         logger.info(f"Hetu chat response generated successfully")

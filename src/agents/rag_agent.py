@@ -27,7 +27,7 @@ class RAGAgent:
         self.project_repo = project_repo
         self.project_content_repo = project_content_repo
         
-        # Initialize LLM client with AIHubMix
+        # Initialize default LLM client with AIHubMix
         if not settings.aihubmix_api_key:
             raise ValueError("AIHUBMIX_API_KEY is required. Please set it in .env file or environment variables.")
         
@@ -36,6 +36,29 @@ class RAGAgent:
             base_url=settings.aihubmix_base_url
         )
         self.chat_model = settings.chat_model
+    
+    def _get_llm_client(self, api_key: Optional[str] = None, base_url: Optional[str] = None) -> OpenAI:
+        """
+        Get LLM client with optional API key and base URL.
+        If provided, uses OpenRouter; otherwise uses default AIHubMix.
+        
+        Args:
+            api_key: Optional API key (if provided, uses OpenRouter)
+            base_url: Optional base URL (if provided, uses this URL)
+            
+        Returns:
+            OpenAI client instance
+        """
+        if api_key:
+            # Use OpenRouter if API key is provided
+            client_base_url = base_url or settings.openrouter_base_url
+            return OpenAI(
+                api_key=api_key,
+                base_url=client_base_url
+            )
+        else:
+            # Use default AIHubMix
+            return self.llm
     
     def _find_project(self, user_question: str, min_score: float = 0.6) -> Optional[Dict[str, Any]]:
         """
@@ -108,7 +131,7 @@ class RAGAgent:
         """
         Check if user's question is asking about the number/count of parallel universe projects.
         
-        Uses keyword matching to detect questions about parallel network count, project count, etc.
+        Uses keyword matching to detect questions about parallel universe count, project count, etc.
         
         Args:
             user_question: User's question
@@ -166,7 +189,9 @@ class RAGAgent:
         self,
         user_question: str,
         project: Optional[str] = None,
-        top_k: int = 5
+        top_k: int = 5,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Query the agent with a question.
@@ -195,7 +220,7 @@ class RAGAgent:
             project_count = self._get_project_count()
             
             if project_count > 0:
-                answer = f"Currently, there are {project_count} projects in the Hetu Parallel Universe ecosystem. The Hetu Parallel Universe is an ecosystem built by HETU using the FLUX points system, consisting of multiple parallel network projects that work together to create a decentralized intelligence economy."
+                answer = f"Currently, there are {project_count} projects in the Hetu Parallel Universe ecosystem. The Hetu Parallel Universe is an ecosystem built by HETU using the FLUX points system, consisting of multiple parallel universe projects that work together to create a decentralized intelligence economy."
                 
                 return {
                     "answer": answer,
@@ -285,22 +310,26 @@ class RAGAgent:
 
 User question: {user_question}
 
-Please provide a helpful answer based on the project info and relevant content above. Additionally, please search Twitter for relevant tweets, discussions, or updates about this project. Prioritize finding recent tweets from 2025 onwards, as these will contain the most up-to-date information. Use your Twitter search capability to find the most relevant and recent tweets (especially from 2025) that can help answer the user's question. If the information from the database and Twitter is insufficient, please say so."""
+Please provide a helpful answer based on the project info and relevant content above. Additionally, please search Twitter for relevant tweets, discussions, or updates about this project. Prioritize finding recent tweets from September 2025 onwards, as these will contain the most up-to-date information. Use your Twitter search capability to find the most relevant and recent tweets (especially from September 2025 and later) that can help answer the user's question. If the information from the database and Twitter is insufficient, please say so."""
         else:
             # Directly send question to LLM without project context
             prompt = f"""Please answer the user's question.
 
 User question: {user_question}
 
-Please provide a helpful, concise answer. Please search Twitter for relevant tweets, prioritizing recent tweets from 2025 onwards for the most current information. Incorporate that information into your answer. Use your Twitter search capability to find the most relevant and recent information (especially from 2025)."""
+Please provide a helpful, concise answer. Please search Twitter for relevant tweets, prioritizing recent tweets from September 2025 onwards for the most current information. Incorporate that information into your answer. Use your Twitter search capability to find the most relevant and recent information (especially from September 2025 and later)."""
         
         # 6. Generate answer using LLM
-        logger.debug(f"Generating LLM response (model: {self.chat_model})")
+        # Select model based on API provider
+        model_name = settings.openrouter_model if api_key else self.chat_model
+        logger.debug(f"Generating LLM response (model: {model_name})")
         try:
-            response = self.llm.chat.completions.create(
-                model=self.chat_model,
+            # Get LLM client (OpenRouter if api_key provided, otherwise AIHubMix)
+            llm_client = self._get_llm_client(api_key=api_key, base_url=base_url)
+            response = llm_client.chat.completions.create(
+                model=model_name,
                     messages=[
-                        {"role": "system", "content": "You are a knowledgeable Hetu Parallel Universe introducer who helps users learn about projects in the parallel network ecosystem. Hetu Parallel Universe is an ecosystem built by HETU using the FLUX points system, consisting of multiple parallel network projects. Your role is to introduce and explain various projects within the Hetu Parallel Universe ecosystem. You can answer questions about any project in the parallel network. Your tone is professional yet friendly, clear and informative. You focus on explaining what each project is, how it works, and how it relates to the Hetu Parallel Universe ecosystem. Always prioritize providing accurate information about projects in the parallel network based on the provided context and Twitter search results."},
+                        {"role": "system", "content": "You are a knowledgeable Hetu Parallel Universe introducer who helps users learn about projects in the parallel universe ecosystem. Hetu Parallel Universe is an ecosystem built by HETU using the FLUX points system, consisting of multiple parallel universe projects. Your role is to introduce and explain various projects within the Hetu Parallel Universe ecosystem. You can answer questions about any project in the parallel universe. Your tone is professional yet friendly, clear and informative. You focus on explaining what each project is, how it works, and how it relates to the Hetu Parallel Universe ecosystem. Always prioritize providing accurate information about projects in the parallel universe based on the provided context and Twitter search results."},
                         {"role": "user", "content": prompt}
                     ],
                 temperature=0.7,

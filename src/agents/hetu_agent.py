@@ -28,7 +28,7 @@ class HetuAgent:
         self.project_repo = project_repo
         self.project_content_repo = project_content_repo
         
-        # Initialize LLM client with AIHubMix
+        # Initialize default LLM client with AIHubMix
         if not settings.aihubmix_api_key:
             raise ValueError("AIHUBMIX_API_KEY is required. Please set it in .env file or environment variables.")
         
@@ -37,6 +37,29 @@ class HetuAgent:
             base_url=settings.aihubmix_base_url
         )
         self.chat_model = settings.chat_model
+    
+    def _get_llm_client(self, api_key: Optional[str] = None, base_url: Optional[str] = None) -> OpenAI:
+        """
+        Get LLM client with optional API key and base URL.
+        If provided, uses OpenRouter; otherwise uses default AIHubMix.
+        
+        Args:
+            api_key: Optional API key (if provided, uses OpenRouter)
+            base_url: Optional base URL (if provided, uses this URL)
+            
+        Returns:
+            OpenAI client instance
+        """
+        if api_key:
+            # Use OpenRouter if API key is provided
+            client_base_url = base_url or settings.openrouter_base_url
+            return OpenAI(
+                api_key=api_key,
+                base_url=client_base_url
+            )
+        else:
+            # Use default AIHubMix
+            return self.llm
     
     def _get_hetu_project(self) -> Optional[Dict[str, Any]]:
         """
@@ -70,7 +93,9 @@ class HetuAgent:
     async def query(
         self,
         user_question: str,
-        top_k: int = 5
+        top_k: int = 5,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Query the agent with a question about Hetu Protocol.
@@ -149,20 +174,24 @@ class HetuAgent:
 
 User question: {user_question}
 
-Please provide a helpful answer about Hetu Protocol based on the project info and relevant content above. Additionally, please search Twitter for relevant tweets, discussions, or updates about Hetu Protocol. Prioritize finding recent tweets from 2025 onwards, as these will contain the most up-to-date information. Use your Twitter search capability to find the most relevant and recent tweets (especially from 2025) that can help answer the user's question. If the information from the database and Twitter is insufficient, please say so."""
+Please provide a helpful answer about Hetu Protocol based on the project info and relevant content above. Additionally, please search Twitter for relevant tweets, discussions, or updates about Hetu Protocol. Prioritize finding recent tweets from September 2025 onwards, as these will contain the most up-to-date information. Use your Twitter search capability to find the most relevant and recent tweets (especially from September 2025 and later) that can help answer the user's question. If the information from the database and Twitter is insufficient, please say so."""
         else:
             # If project not found in database, still answer but mention it
             prompt = f"""Answer the user's question about Hetu Protocol.
 
 User question: {user_question}
 
-Please provide a helpful answer about Hetu Protocol. Please search Twitter for relevant tweets about Hetu Protocol, prioritizing recent tweets from 2025 onwards for the most current information. Incorporate that information into your answer. Use your Twitter search capability to find the most relevant and recent information about Hetu Protocol (especially from 2025)."""
+Please provide a helpful answer about Hetu Protocol. Please search Twitter for relevant tweets about Hetu Protocol, prioritizing recent tweets from September 2025 onwards for the most current information. Incorporate that information into your answer. Use your Twitter search capability to find the most relevant and recent information about Hetu Protocol (especially from September 2025 and later)."""
         
         # 4. Generate answer using LLM with Hetu Protocol introducer role
-        logger.debug(f"Generating LLM response (model: {self.chat_model})")
+        # Select model based on API provider
+        model_name = settings.openrouter_model if api_key else self.chat_model
+        logger.debug(f"Generating LLM response (model: {model_name})")
         try:
-            response = self.llm.chat.completions.create(
-                model=self.chat_model,
+            # Get LLM client (OpenRouter if api_key provided, otherwise AIHubMix)
+            llm_client = self._get_llm_client(api_key=api_key, base_url=base_url)
+            response = llm_client.chat.completions.create(
+                model=model_name,
                 messages=[
                     {"role": "system", "content": "You are a knowledgeable Hetu Protocol introducer who helps users learn about Hetu Protocol. Your role is to introduce and explain Hetu Protocol in a professional yet friendly manner. You focus on explaining what Hetu Protocol is, how it works, its key features, technical details, and applications. Your tone is clear, informative, and approachable. You are enthusiastic about Hetu Protocol but maintain professionalism. Always prioritize providing accurate information about Hetu Protocol based on the provided context and Twitter search results."},
                     {"role": "user", "content": prompt}
