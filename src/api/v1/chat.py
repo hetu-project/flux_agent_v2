@@ -13,6 +13,28 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
 
+def extract_api_key_from_auth_header(auth_header: str | None) -> str | None:
+    """
+    Extract API key from Authorization Bearer header.
+    
+    Args:
+        auth_header: Authorization header value, e.g., "Bearer sk-xxxxx" or None
+    
+    Returns:
+        API key string if valid Bearer token found, None otherwise
+    """
+    if not auth_header:
+        return None
+    
+    # Normalize to handle case-insensitive "Bearer"
+    auth_header_lower = auth_header.lower()
+    if auth_header_lower.startswith("bearer "):
+        # Extract token after "Bearer " prefix (case-insensitive)
+        return auth_header[7:]  # Use original case for the token
+    
+    return None
+
+
 @router.post("", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
@@ -30,7 +52,7 @@ async def chat(
         ]
     }
     
-    Optional header: x-api-key - If provided, uses OpenRouter API instead of AIHubMix
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
     
     The agent will automatically:
     1. Extract user query from the last message in messages array
@@ -42,8 +64,9 @@ async def chat(
     If not provided, the agent will auto-detect and search for relevant projects.
     """
     try:
-        # Extract x-api-key from request headers (if provided, uses OpenRouter)
-        api_key = http_request.headers.get("x-api-key")
+        # Extract API key from Authorization Bearer header (if provided, uses OpenRouter)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
         
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
@@ -93,7 +116,7 @@ async def chat_linkol(
         "top_k": 5  // Optional, number of documents to retrieve
     }
     
-    Optional header: x-api-key - If provided, uses OpenRouter API instead of AIHubMix
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
     
     The agent will automatically:
     1. Analyze if the question is related to Linkol, KOL, or Twitter influencers
@@ -105,8 +128,9 @@ async def chat_linkol(
     the user to ask about Linkol-related topics.
     """
     try:
-        # Extract x-api-key from request headers (if provided, uses OpenRouter)
-        api_key = http_request.headers.get("x-api-key")
+        # Extract API key from Authorization Bearer header (if provided, uses OpenRouter)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
         
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
@@ -155,7 +179,7 @@ async def chat_hetu(
         "top_k": 5  // Optional, number of documents to retrieve
     }
     
-    Optional header: x-api-key - If provided, uses OpenRouter API instead of AIHubMix
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
     
     The agent is specialized in answering questions about Hetu Protocol.
     It will:
@@ -165,8 +189,9 @@ async def chat_hetu(
     4. Generate response as a Hetu Protocol introducer
     """
     try:
-        # Extract x-api-key from request headers (if provided, uses OpenRouter)
-        api_key = http_request.headers.get("x-api-key")
+        # Extract API key from Authorization Bearer header (if provided, uses OpenRouter)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
         
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
