@@ -20,12 +20,11 @@ RUN poetry config virtualenvs.create false && \
     if [ -f poetry.lock ]; then \
         poetry install --no-root --no-interaction; \
     else \
-        poetry install --no-root --no-interaction --no-lock; \
+        poetry install --no-root --no-interaction; \
     fi
 
 # Copy source code
 COPY src/ ./src/
-COPY scripts/ ./scripts/
 
 # Expose port
 EXPOSE 8000

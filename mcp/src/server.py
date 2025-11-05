@@ -106,5 +106,5 @@ async def check_other_projects(user_question: str) -> Dict[str, Any]:
 # ============================================================================
 
 if __name__ == "__main__":
-    logger.info("Starting MCP Server...")
-    mcp.run()
+    logger.info("Starting MCP Server in HTTP mode...")
+    mcp.run(transport="http", host="0.0.0.0", port=6001)

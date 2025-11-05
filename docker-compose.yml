@@ -18,15 +18,37 @@ services:
   # FastAPI Application
   api:
     build:
-      context: .
+      context: ./agent_service
       dockerfile: Dockerfile
     container_name: hetu-agent-api
     ports:
       - "6000:8000"
     volumes:
       # Mount source code for development
-      - ./src:/app/src:ro
+      - ./agent_service/src:/app/src:ro
       - ./scripts:/app/scripts:ro
+      - ./.env:/app/.env:ro
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    depends_on:
+      qdrant:
+        condition: service_started
+    networks:
+      - hetu-network
+    restart: unless-stopped
+
+  # MCP Server
+  mcp:
+    build:
+      context: ./mcp
+      dockerfile: Dockerfile
+    container_name: hetu-mcp-server
+    ports:
+      - "6001:6001"
+    volumes:
+      # Mount source code for development
+      - ./mcp/src:/app/src:ro
       - ./.env:/app/.env:ro
     environment:
       - QDRANT_HOST=qdrant

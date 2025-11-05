@@ -83,6 +83,9 @@ QDRANT_PORT=6333
 ### 4. Run the Application
 
 ```bash
+# Navigate to agent_service directory
+cd agent_service
+
 # Start FastAPI app
 poetry run uvicorn src.main:app --reload
 
@@ -130,19 +133,18 @@ curl http://localhost:8000/api/collections/twitter_tweets/info
 
 ```
 hetu-agent/
-├── src/              # Source code
-│   ├── main.py       # FastAPI application
-│   ├── config.py     # Configuration
-│   ├── models/       # Data models
-│   │   └── tweet.py
-│   ├── services/     # Services
-│   │   ├── qdrant_client.py
-│   │   ├── embedding.py
-│   │   └── twitter.py
-│   └── agents/       # Agents
-│       └── rag_agent.py
-├── pyproject.toml    # Poetry dependencies
-├── docker-compose.yml # Qdrant setup
+├── agent_service/    # Agent service (microservice)
+│   ├── src/          # Source code
+│   │   ├── main.py   # FastAPI application
+│   │   ├── config.py # Configuration
+│   │   ├── models/   # Data models
+│   │   ├── services/ # Services
+│   │   └── agents/   # Agents
+│   ├── pyproject.toml # Poetry dependencies
+│   └── Dockerfile     # Docker configuration
+├── mcp/              # MCP service
+├── scripts/          # Utility scripts
+├── docker-compose.yml # Docker compose setup
 └── README.md         # This file
 ```
 
@@ -191,6 +193,9 @@ Get collection information
 ### Code Quality
 
 ```bash
+# Navigate to agent_service directory
+cd agent_service
+
 # Format code
 poetry run black src/
 
