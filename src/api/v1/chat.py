@@ -64,19 +64,25 @@ async def chat(
     If not provided, the agent will auto-detect and search for relevant projects.
     """
     try:
-        # Extract API key from Authorization Bearer header (if provided, uses OpenRouter)
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
         auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
         api_key = extract_api_key_from_auth_header(auth_header)
         
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
-        logger.info(f"Chat request received: query='{user_query[:100]}...', project={request.project}, model={request.model}, using_api={'OpenRouter' if api_key else 'AIHubMix'}")
+        logger.info(f"Chat request received: query='{user_query[:100]}...', project={request.project}, model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}")
         
         result = await rag_agent.query(
             user_question=user_query,
             project=request.project,
             top_k=request.top_k,
-            api_key=api_key
+            api_key=api_key,
+            base_url=base_url
         )
         
         logger.info(f"Chat response generated successfully")
@@ -128,18 +134,24 @@ async def chat_linkol(
     the user to ask about Linkol-related topics.
     """
     try:
-        # Extract API key from Authorization Bearer header (if provided, uses OpenRouter)
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
         auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
         api_key = extract_api_key_from_auth_header(auth_header)
         
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
-        logger.info(f"Linkol chat request received: query='{user_query[:100]}...', model={request.model}, using_api={'OpenRouter' if api_key else 'AIHubMix'}")
+        logger.info(f"Linkol chat request received: query='{user_query[:100]}...', model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}")
         
         result = await linkol_agent.query(
             user_question=user_query,
             top_k=request.top_k,
-            api_key=api_key
+            api_key=api_key,
+            base_url=base_url
         )
         
         logger.info(f"Linkol chat response generated successfully")
@@ -189,18 +201,24 @@ async def chat_hetu(
     4. Generate response as a Hetu Protocol introducer
     """
     try:
-        # Extract API key from Authorization Bearer header (if provided, uses OpenRouter)
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
         auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
         api_key = extract_api_key_from_auth_header(auth_header)
         
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
-        logger.info(f"Hetu chat request received: query='{user_query[:100]}...', model={request.model}, using_api={'OpenRouter' if api_key else 'AIHubMix'}")
+        logger.info(f"Hetu chat request received: query='{user_query[:100]}...', model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}")
         
         result = await hetu_agent.query(
             user_question=user_query,
             top_k=request.top_k,
-            api_key=api_key
+            api_key=api_key,
+            base_url=base_url
         )
         
         logger.info(f"Hetu chat response generated successfully")
