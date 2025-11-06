@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # OpenRouter Settings
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_model: str = "x-ai/grok-4"
+    openrouter_model: str = "x-ai/grok-4-fast"
     
     # Twitter API (从环境变量读取)
     twitter_bearer_token: str = ""
