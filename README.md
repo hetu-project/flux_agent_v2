@@ -98,6 +98,37 @@ API will be available at:
 - http://localhost:8000
 - API Docs: http://localhost:8000/docs
 
+### 5. Run Initialization Scripts (in Docker)
+
+To run initialization scripts inside the Docker container:
+
+**Option 1: Using docker compose exec (Recommended)**
+```bash
+# Initialize projects from external API
+docker compose exec api python scripts/init_projects.py
+
+# With custom arguments
+docker compose exec api python scripts/init_projects.py --limit 50
+
+# Add project content (papers, tweets, etc.)
+docker compose exec api python scripts/add_project_content.py
+```
+
+**Option 2: Interactive shell**
+```bash
+# Enter the container interactively
+docker compose exec api bash
+
+# Then run scripts inside the container
+python scripts/init_projects.py
+python scripts/add_project_content.py
+```
+
+**Note:** Make sure the containers are running before executing scripts:
+```bash
+docker compose up -d
+```
+
 ## Usage
 
 ### 1. Collect Tweets

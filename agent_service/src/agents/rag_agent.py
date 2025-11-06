@@ -1,6 +1,7 @@
 """RAG Agent for querying project information."""
 
 from typing import List, Dict, Any, Optional
+import numpy as np
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 from openai import OpenAI
 from src.config import get_settings
@@ -64,9 +65,9 @@ class RAGAgent:
         """
         Find the most relevant project from database based on user question.
         
-        This method uses vector similarity search to find projects. It only returns a project
-        if the similarity score is high enough (>= min_score), ensuring the user's question
-        is actually related to a specific project in the database.
+        Strategy:
+        1. First, try to find project by name using vector similarity search on project names
+        2. If not found, fall back to vector similarity search on project descriptions
         
         Args:
             user_question: User's question
@@ -82,49 +83,98 @@ class RAGAgent:
         
         try:
             logger.debug(f"Searching for project matching: {user_question[:50]}... (min_score={min_score})")
-            # Use vector search to find the most relevant project
-            # Higher min_score ensures we only match when user explicitly mentions/asks about a project
-            results = self.project_repo.search(query=user_question, top_k=1, min_score=min_score)
+            
+            # Step 1: Try to find project by name using vector similarity
+            # Get all projects and search by name similarity
+            all_projects = self.project_repo.get_all()
+            question_lower = user_question.lower()
+            
+            # Generate embedding for the question
+            question_embedding = self.embedding.embed_text(user_question)
+            
+            # Try to match project names using vector similarity
+            best_name_match = None
+            best_name_score = 0.0
+            
+            for project in all_projects:
+                project_name = project.name
+                if not project_name:
+                    continue
+                
+                # Generate embedding for project name
+                name_embedding = self.embedding.embed_text(project_name)
+                
+                # Convert to numpy arrays for similarity calculation
+                question_vec = np.array(question_embedding)
+                name_vec = np.array(name_embedding)
+                
+                # Calculate cosine similarity
+                similarity = np.dot(question_vec, name_vec) / (
+                    np.linalg.norm(question_vec) * np.linalg.norm(name_vec)
+                )
+                
+                # Also check if project name appears in question (exact or partial match)
+                project_name_lower = project_name.lower()
+                name_in_question = project_name_lower in question_lower
+                
+                # Check for partial match: split project name into words
+                project_words = [w for w in project_name_lower.split() if len(w) > 2]
+                partial_match = any(word in question_lower for word in project_words)
+                
+                # If name appears in question or similarity is high, consider it a match
+                if name_in_question or partial_match or similarity >= min_score:
+                    if similarity > best_name_score:
+                        best_name_score = similarity
+                        best_name_match = {
+                            "name": project_name,
+                            "description": project.description,
+                            "score": float(similarity)
+                        }
+            
+            # If we found a good name match, return it
+            if best_name_match and (best_name_score >= min_score or 
+                                    best_name_match["name"].lower() in question_lower):
+                logger.info(f"Found project '{best_name_match['name']}' by name matching (score: {best_name_score:.3f})")
+                return best_name_match
+            
+            # Step 2: Fall back to description-based vector search
+            logger.debug("No project found by name matching, trying description-based search...")
+            results = self.project_repo.search(query=user_question, top_k=5, min_score=min_score)
             
             if results and len(results) > 0:
-                project = results[0]
-                score = project.get('score', 0)
-                project_name = project.get('name')
-                
-                if not project_name:
-                    logger.debug("Found project but no name, skipping")
-                    return None
-                
-                # Check if project name (or significant words from it) appears in question
-                question_lower = user_question.lower()
-                project_name_lower = project_name.lower()
-                
-                # Check for exact project name match
-                if project_name_lower in question_lower:
-                    logger.info(f"Found project '{project_name}' (score: {score:.3f}) - exact name match")
-                    return project
-                
-                # Check for partial match: split project name into words and check if any significant word appears
-                # This handles cases like "Akasha" matching "Akasha Dao"
-                project_words = [w for w in project_name_lower.split() if len(w) > 3]  # Only check words longer than 3 chars
-                for word in project_words:
-                    if word in question_lower:
-                        logger.info(f"Found project '{project_name}' (score: {score:.3f}) - partial name match (word: {word})")
+                # Check all results to see if any project name appears in the question
+                for project in results:
+                    project_name = project.get('name')
+                    if not project_name:
+                        continue
+                    
+                    project_name_lower = project_name.lower()
+                    score = project.get('score', 0)
+                    
+                    # If project name appears in question, prioritize it
+                    if project_name_lower in question_lower:
+                        logger.info(f"Found project '{project_name}' by description search with name match (score: {score:.3f})")
+                        return project
+                    
+                    # Check for partial match
+                    project_words = [w for w in project_name_lower.split() if len(w) > 2]
+                    if any(word in question_lower for word in project_words):
+                        logger.info(f"Found project '{project_name}' by description search with partial name match (score: {score:.3f})")
                         return project
                 
-                # If similarity is very high (>= 0.75), accept even if name not explicitly mentioned
-                # This handles cases like "tell me about the fancy project" matching based on description
-                if score >= 0.75:
-                    logger.info(f"Found project '{project_name}' (score: {score:.3f}) - high similarity match")
-                    return project
+                # If no name match found, return the top result if similarity is high enough
+                top_project = results[0]
+                top_score = top_project.get('score', 0)
+                if top_score >= 0.75:
+                    logger.info(f"Found project '{top_project.get('name')}' by description search (high similarity: {top_score:.3f})")
+                    return top_project
                 else:
-                    logger.debug(f"Project '{project_name}' found but similarity too low ({score:.3f} < 0.75) and name not mentioned")
-                    return None
+                    logger.debug(f"Top project '{top_project.get('name')}' found but similarity too low ({top_score:.3f} < 0.75)")
             
             logger.debug(f"No project found matching the query (similarity threshold: {min_score})")
             return None
         except Exception as e:
-            logger.error(f"Error finding project: {e}")
+            logger.error(f"Error finding project: {e}", exc_info=True)
             return None
     
     def _check_parallel_universe_count_intent(self, user_question: str) -> bool:
