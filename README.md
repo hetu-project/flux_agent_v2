@@ -7,7 +7,7 @@ RAG Agent for Twitter project analysis using Qdrant vector database.
 - **Python**: 3.11.11
 - **Backend**: FastAPI
 - **Vector DB**: Qdrant
-- **LLM**: OpenAI / AIHubMix (可切换)
+- **LLM**: OpenAI / AIHubMix (switchable)
 - **Package Manager**: Poetry
 
 ## Features
@@ -16,7 +16,7 @@ RAG Agent for Twitter project analysis using Qdrant vector database.
 - Vector embedding and storage in Qdrant
 - RAG-based information retrieval
 - Conversational agent for project analysis
-- **支持多种LLM提供商**：OpenAI、AIHubMix
+- **Supports multiple LLM providers**: OpenAI, AIHubMix
 
 ## Setup
 
@@ -51,7 +51,7 @@ nano .env  # or use your favorite editor
 
 #### Configuration Options
 
-**使用 OpenAI:**
+**Using OpenAI:**
 ```env
 LLM_PROVIDER=openai
 OPENAI_API_KEY=your_openai_api_key
@@ -60,17 +60,17 @@ CHAT_MODEL=gpt-4-turbo-preview
 EMBEDDING_MODEL=text-embedding-ada-002
 ```
 
-**使用 AIHubMix (更便宜):**
+**Using AIHubMix (cheaper):**
 ```env
 LLM_PROVIDER=aihubmix
 AIHUBMIX_API_KEY=your_aihubmix_api_key
 AIHUBMIX_BASE_URL=https://aihubmix.com
-# AIHubMix支持多种模型，你可以根据文档选择合适的chat_model
-CHAT_MODEL=claude-3-5-sonnet  # 或其他AIHubMix支持的模型
-EMBEDDING_MODEL=text-embedding-ada-002  # 或AIHubMix的embedding模型
+# AIHubMix supports multiple models, you can choose the appropriate chat_model according to the documentation
+CHAT_MODEL=claude-3-5-sonnet  # or other models supported by AIHubMix
+EMBEDDING_MODEL=text-embedding-ada-002  # or AIHubMix embedding model
 ```
 
-**其他必要配置:**
+**Other required configuration:**
 ```env
 # Twitter API
 TWITTER_BEARER_TOKEN=your_twitter_bearer_token
@@ -150,11 +150,11 @@ hetu-agent/
 
 ## LLM Provider Switching
 
-项目支持在OpenAI和AIHubMix之间切换，只需修改`.env`文件中的`LLM_PROVIDER`设置即可。
+The project supports switching between OpenAI and AIHubMix by simply modifying the `LLM_PROVIDER` setting in the `.env` file.
 
-**费用对比:**
-- OpenAI: 官方定价
-- AIHubMix: 通常更便宜，支持多种模型(Claude, Gemini, Qwen等)
+**Cost comparison:**
+- OpenAI: Official pricing
+- AIHubMix: Usually cheaper, supports multiple models (Claude, Gemini, Qwen, etc.)
 
 ## API Endpoints
 
