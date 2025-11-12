@@ -4,8 +4,9 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from src.agents.rag_agent import RAGAgent
 from src.agents.linkol_agent import LinkolAgent
 from src.agents.hetu_agent import HetuAgent
+from src.agents.agent_mcp.mcp_agent import MCPAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
-from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent
+from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -237,5 +238,72 @@ async def chat_hetu(
         
     except Exception as e:
         logger.error(f"Error processing Hetu chat request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/mcp", response_model=ChatResponse)
+async def chat_mcp(
+    request: ChatRequest,
+    http_request: Request,
+    mcp_agent: MCPAgent = Depends(get_mcp_agent),
+):
+    """
+    Chat with the MCP agent.
+    
+    This agent uses MCP (Model Context Protocol) service for tool calling instead of function calling.
+    It will:
+    1. Get all available tools from MCP server
+    2. Let LLM analyze the question and choose the appropriate tool
+    3. Call the tool through MCP service
+    4. Generate final answer based on tool results
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "your question"}
+        ],
+        "top_k": 5  // Optional, ignored for MCP agent
+    }
+    
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
+    """
+    try:
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
+        
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        logger.info(f"MCP chat request received: query='{user_query[:100]}...', model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}")
+        
+        result = await mcp_agent.query(
+            user_question=user_query,
+            top_k=request.top_k,
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        logger.info(f"MCP chat response generated successfully")
+        
+        # Format response in OpenAI-compatible format
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing MCP chat request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 

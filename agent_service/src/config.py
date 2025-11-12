@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     linkol_url: str = "https://api.linkol.ai"
     linkol_api_key: str = ""
     
+    # MCP Server (从环境变量读取)
+    mcp_url: str = "http://localhost:6001"
+    mcp_endpoint: str = "/mcp"
+    
     # Application
     log_level: str = "INFO"
     log_file: Optional[str] = Field(None, description="Optional log file path (logs/app.log)")

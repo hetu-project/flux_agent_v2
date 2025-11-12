@@ -20,6 +20,7 @@ from src.repositories.project_repository import ProjectRepository
 from src.repositories.project_content_repository import ProjectContentRepository
 from src.agents.linkol_agent import LinkolAgent
 from src.agents.hetu_agent import HetuAgent
+from src.agents.agent_mcp.mcp_agent import MCPAgent
 
 # Import API routes
 from src.api.v1 import projects, tweets, chat, collections, project_content
@@ -80,6 +81,9 @@ hetu_agent = HetuAgent(
     project_content_repo=project_content_repo
 )
 
+# Initialize MCP agent (uses MCP service for tool calling)
+mcp_agent = MCPAgent()
+
 # Initialize repositories
 tweet_repo = TweetRepository(qdrant_service, collection_name="twitter_tweets")
 collection_repo = CollectionRepository(qdrant_service)
@@ -103,6 +107,7 @@ set_dependencies(
     rag_agent=rag_agent,
     linkol_agent=linkol_agent,
     hetu_agent=hetu_agent,
+    mcp_agent=mcp_agent,
     collection_repo=collection_repo,
 )
 logger.info("Dependencies set successfully")

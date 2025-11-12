@@ -749,7 +749,7 @@ Respond with only "yes" or "no"."""
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.7,
-                    max_tokens=1000
+                    max_tokens=300  # Limit to ~200 English words
                 )
                 
                 answer = response.choices[0].message.content
@@ -1165,7 +1165,7 @@ We don't have relevant information in our database about this topic. Please sear
                             {"role": "user", "content": prompt}
                         ],
                         temperature=0.7,
-                        max_tokens=1000
+                        max_tokens=300  # Limit to ~200 English words
                     )
                     
                     answer = response.choices[0].message.content
@@ -1205,7 +1205,7 @@ Please provide a helpful and informative answer based on the content above."""
                             {"role": "user", "content": prompt}
                         ],
                         temperature=0.7,
-                        max_tokens=1000
+                        max_tokens=300  # Limit to ~200 English words
                     )
                     
                     answer = response.choices[0].message.content
@@ -1293,7 +1293,7 @@ Please introduce Linkol in a professional yet friendly tone. Focus on providing 
                         {"role": "user", "content": prompt}
                     ],
                     temperature=0.7,
-                    max_tokens=1000
+                    max_tokens=300  # Limit to ~200 English words
                 )
                 
                 answer = response.choices[0].message.content
