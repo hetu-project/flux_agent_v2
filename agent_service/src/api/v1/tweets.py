@@ -11,6 +11,9 @@ from src.schemas.tweet_schema import (
     TweetSearchRequest,
     TweetSearchResponse,
     TweetSearchResult,
+    GetTweetsByProjectRequest,
+    GetTweetsByProjectResponse,
+    TweetItem,
 )
 from src.api.dependencies import (
     get_project_repo,
@@ -43,8 +46,7 @@ async def collect_tweets(
         # Use service layer for business logic
         count = await tweet_service.collect_and_store_tweets(
             project_name=request.project_name,
-            username=request.username,
-            query=request.query,
+            user_id=request.user_id,
             max_tweets=request.max_tweets
         )
         
@@ -100,6 +102,48 @@ async def search_tweets(
         return TweetSearchResponse(
             results=search_results,
             total=len(search_results)
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/by-project", response_model=GetTweetsByProjectResponse)
+async def get_tweets_by_project(
+    request: GetTweetsByProjectRequest,
+    tweet_repo: TweetRepository = Depends(get_tweet_repo),
+):
+    """
+    Get all tweets for a specific project.
+    """
+    try:
+        tweets = tweet_repo.get_by_project(
+            project=request.project_name,
+            limit=request.limit,
+            offset=request.offset
+        )
+        
+        # Format results
+        tweet_items = [
+            TweetItem(
+                id=t["id"],
+                tweet_id=t.get("tweet_id", t["id"]),
+                text=t["text"],
+                author=t["author"],
+                author_id=t.get("author_id"),
+                created_at=t["created_at"],
+                project=t.get("project"),
+                likes=t.get("likes", 0),
+                retweets=t.get("retweets", 0),
+                replies=t.get("replies", 0),
+            )
+            for t in tweets
+        ]
+        
+        return GetTweetsByProjectResponse(
+            project_name=request.project_name,
+            tweets=tweet_items,
+            total=len(tweet_items)
         )
         
     except Exception as e:

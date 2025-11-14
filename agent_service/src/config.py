@@ -26,10 +26,10 @@ class Settings(BaseSettings):
     
     # OpenRouter Settings
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_model: str = "x-ai/grok-4-fast"
+    openrouter_model: str = "deepseek/deepseek-chat-v3.1"
     
-    # Twitter API (从环境变量读取)
-    twitter_bearer_token: str = ""
+    # RapidAPI for Twitter (从环境变量读取)
+    rapid_api_key: str = ""
     
     # Linkol API (从环境变量读取)
     linkol_url: str = "https://api.linkol.ai"
@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # MCP Server (从环境变量读取)
     mcp_url: str = "http://localhost:6001"
     mcp_endpoint: str = "/mcp"
+    
+    # Task API (从环境变量读取)
+    task_api_url: str = "http://144.91.78.212:8000"
     
     # Application
     log_level: str = "INFO"

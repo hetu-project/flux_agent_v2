@@ -21,9 +21,13 @@ from src.repositories.project_content_repository import ProjectContentRepository
 from src.agents.linkol_agent import LinkolAgent
 from src.agents.hetu_agent import HetuAgent
 from src.agents.agent_mcp.mcp_agent import MCPAgent
+from src.agents.v2.rag_agent_v2 import RAGAgentV2
+from src.agents.v2.linkol_agent_v2 import LinkolAgentV2
+from src.agents.v2.hetu_agent_v2 import HetuAgentV2
 
 # Import API routes
 from src.api.v1 import projects, tweets, chat, collections, project_content
+from src.api.v2 import chat as chat_v2
 from src.api.dependencies import set_dependencies
 
 # Initialize app
@@ -88,6 +92,24 @@ mcp_agent = MCPAgent()
 tweet_repo = TweetRepository(qdrant_service, collection_name="twitter_tweets")
 collection_repo = CollectionRepository(qdrant_service)
 
+# Initialize V2 agents (with cheaper models and RAG-based tweet search)
+rag_agent_v2 = RAGAgentV2(
+    project_repo=project_repo,
+    project_content_repo=project_content_repo,
+    tweet_repo=tweet_repo
+)
+
+linkol_agent_v2 = LinkolAgentV2(
+    project_content_repo=project_content_repo,
+    tweet_repo=tweet_repo
+)
+
+hetu_agent_v2 = HetuAgentV2(
+    project_repo=project_repo,
+    project_content_repo=project_content_repo,
+    tweet_repo=tweet_repo
+)
+
 # Initialize business services
 tweet_service = TweetService(
     tweet_repo=tweet_repo,
@@ -109,6 +131,9 @@ set_dependencies(
     hetu_agent=hetu_agent,
     mcp_agent=mcp_agent,
     collection_repo=collection_repo,
+    rag_agent_v2=rag_agent_v2,
+    linkol_agent_v2=linkol_agent_v2,
+    hetu_agent_v2=hetu_agent_v2,
 )
 logger.info("Dependencies set successfully")
 
@@ -119,6 +144,8 @@ app.include_router(tweets.router)
 app.include_router(chat.router)
 app.include_router(collections.router)
 app.include_router(project_content.router)
+# Register V2 routes
+app.include_router(chat_v2.router)
 logger.info("API routes registered successfully")
 logger.info("Application startup complete")
 

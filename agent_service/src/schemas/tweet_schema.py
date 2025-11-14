@@ -8,9 +8,8 @@ from datetime import datetime
 class CollectTweetsRequest(BaseModel):
     """Request schema for collecting tweets."""
     project_name: str = Field(..., description="Project name")
-    username: Optional[str] = Field(None, description="Twitter username (without @)")
-    max_tweets: int = Field(100, ge=1, le=1000, description="Maximum number of tweets to collect")
-    query: Optional[str] = Field(None, description="Custom search query")
+    user_id: str = Field(..., description="Twitter user ID (numeric string)")
+    max_tweets: int = Field(10, ge=1, le=100, description="Maximum number of tweets to collect")
 
 
 class CollectTweetsResponse(BaseModel):
@@ -42,5 +41,33 @@ class TweetSearchResult(BaseModel):
 class TweetSearchResponse(BaseModel):
     """Response schema for searching tweets."""
     results: List[TweetSearchResult]
+    total: int
+
+
+class GetTweetsByProjectRequest(BaseModel):
+    """Request schema for getting tweets by project."""
+    project_name: str = Field(..., description="Project name")
+    limit: Optional[int] = Field(None, ge=1, le=1000, description="Maximum number of tweets to return")
+    offset: Optional[int] = Field(None, ge=0, description="Offset for pagination")
+
+
+class TweetItem(BaseModel):
+    """Single tweet item."""
+    id: str
+    tweet_id: str
+    text: str
+    author: str
+    author_id: Optional[str] = None
+    created_at: str
+    project: Optional[str] = None
+    likes: int = 0
+    retweets: int = 0
+    replies: int = 0
+
+
+class GetTweetsByProjectResponse(BaseModel):
+    """Response schema for getting tweets by project."""
+    project_name: str
+    tweets: List[TweetItem]
     total: int
 

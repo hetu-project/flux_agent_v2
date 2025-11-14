@@ -26,7 +26,7 @@ services:
     volumes:
       # Mount source code for development
       - ./agent_service/src:/app/src:ro
-      - ./agent_service/test_mcp_service.py:/app/test_mcp_service.py:ro
+      - ./agent_service/test_twitter_fetch.py:/app/test_twitter_fetch.py:ro
       - ./scripts:/app/scripts:ro
       - ./.env:/app/.env:ro
     environment:

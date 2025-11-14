@@ -5,6 +5,9 @@ from .tweet_schema import (
     CollectTweetsResponse,
     TweetSearchRequest,
     TweetSearchResponse,
+    GetTweetsByProjectRequest,
+    GetTweetsByProjectResponse,
+    TweetItem,
 )
 from .chat_schema import (
     ChatRequest,
@@ -20,12 +23,19 @@ from .project_schema import (
     ProjectResponse,
     ProjectListResponse,
 )
+from .task_schema import (
+    TaskListRequest,
+    TaskListResponse,
+)
 
 __all__ = [
     "CollectTweetsRequest",
     "CollectTweetsResponse",
     "TweetSearchRequest",
     "TweetSearchResponse",
+    "GetTweetsByProjectRequest",
+    "GetTweetsByProjectResponse",
+    "TweetItem",
     "ChatRequest",
     "ChatResponse",
     "CollectionInfo",
@@ -34,5 +44,7 @@ __all__ = [
     "ProjectUpdateRequest",
     "ProjectResponse",
     "ProjectListResponse",
+    "TaskListRequest",
+    "TaskListResponse",
 ]
 

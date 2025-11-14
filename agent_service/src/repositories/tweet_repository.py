@@ -1,6 +1,7 @@
 """Repository layer for Tweet CRUD operations."""
 
 from typing import List, Optional, Dict, Any
+import hashlib
 from qdrant_client.http.models import (
     PointStruct,
     Filter,
@@ -11,6 +12,9 @@ from qdrant_client.http.models import (
 
 from src.models.tweet import Tweet
 from src.services.qdrant_client import QdrantService
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class TweetRepository:
@@ -28,6 +32,28 @@ class TweetRepository:
         self.qdrant = qdrant_service
         self.collection_name = collection_name
     
+    def _tweet_id_to_qdrant_id(self, tweet_id: str) -> int:
+        """
+        Convert tweet ID string to integer ID for Qdrant.
+        
+        Twitter IDs are numeric strings, but they can be very large.
+        If the ID can be converted to int directly, use it.
+        Otherwise, use MD5 hash to generate a consistent integer ID.
+        
+        Args:
+            tweet_id: Tweet ID string
+            
+        Returns:
+            Integer ID for Qdrant
+        """
+        try:
+            # Try to convert directly to int (Twitter IDs are numeric)
+            return int(tweet_id)
+        except (ValueError, OverflowError):
+            # If conversion fails or number is too large, use hash
+            hash_bytes = hashlib.md5(tweet_id.encode()).digest()[:8]
+            return int.from_bytes(hash_bytes, byteorder='big')
+    
     def create(self, tweets: List[Tweet], embeddings: List[List[float]]) -> int:
         """
         Create (insert) tweets into the vector database.
@@ -44,8 +70,9 @@ class TweetRepository:
         
         points = []
         for tweet, embedding in zip(tweets, embeddings):
+            qdrant_id = self._tweet_id_to_qdrant_id(tweet.id)
             points.append(PointStruct(
-                id=tweet.id,
+                id=qdrant_id,
                 vector=embedding,
                 payload=tweet.to_payload()
             ))
@@ -235,6 +262,63 @@ class TweetRepository:
             return 1  # Qdrant doesn't return count, assume success
         except Exception:
             return 0
+    
+    def get_by_project(
+        self,
+        project: str,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all tweets for a specific project.
+        
+        Args:
+            project: Project name
+            limit: Optional limit on number of results
+            offset: Optional offset for pagination
+            
+        Returns:
+            List of tweet data
+        """
+        try:
+            # Build filter
+            filter_query = Filter(
+                must=[
+                    FieldCondition(key="project", match=MatchValue(value=project))
+                ]
+            )
+            
+            # Use scroll to get all matching points
+            scroll_limit = limit if limit else 1000
+            result = self.qdrant.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=filter_query,
+                limit=scroll_limit,
+                offset=offset
+            )
+            
+            points, next_offset = result
+            
+            # Format results
+            tweets = []
+            for point in points:
+                tweets.append({
+                    "id": str(point.id),
+                    "text": point.payload.get("text", ""),
+                    "author": point.payload.get("author", ""),
+                    "author_id": point.payload.get("author_id"),
+                    "created_at": point.payload.get("created_at", ""),
+                    "project": point.payload.get("project"),
+                    "tweet_id": point.payload.get("tweet_id", str(point.id)),
+                    "likes": point.payload.get("likes", 0),
+                    "retweets": point.payload.get("retweets", 0),
+                    "replies": point.payload.get("replies", 0),
+                })
+            
+            return tweets
+        except Exception as e:
+            logger.error(f"Error getting tweets by project: {e}", exc_info=True)
+            return []
     
     def count(
         self,

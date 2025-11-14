@@ -26,8 +26,7 @@ class TweetService:
     async def collect_and_store_tweets(
         self,
         project_name: str,
-        username: str = None,
-        query: str = None,
+        user_id: str = None,
         max_tweets: int = 100
     ) -> int:
         """
@@ -35,31 +34,25 @@ class TweetService:
         
         Args:
             project_name: Project name
-            username: Twitter username (optional)
-            query: Search query (optional)
+            user_id: Twitter user ID (required)
             max_tweets: Maximum number of tweets
             
         Returns:
             Number of tweets collected
         """
+        if not user_id:
+            raise ValueError("user_id must be provided")
+        
         # Ensure collection exists
         collection_name = "twitter_tweets"
         vector_size = self.embedding_service.get_dimension()
         self.collection_repo.create(collection_name, vector_size)
         
-        # Fetch tweets from Twitter
-        if query:
-            tweets = await self.twitter_service.search_tweets(
-                query=query,
-                max_results=max_tweets
-            )
-        elif username:
-            tweets = await self.twitter_service.get_user_tweets(
-                username=username,
-                max_results=max_tweets
-            )
-        else:
-            raise ValueError("Either 'query' or 'username' must be provided")
+        # Fetch tweets from Twitter using RapidAPI
+        tweets = await self.twitter_service.get_user_tweets_by_id(
+            user_id=user_id,
+            max_results=max_tweets
+        )
         
         # Add project metadata
         for tweet in tweets:

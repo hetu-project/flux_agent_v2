@@ -3,4 +3,4 @@
 # Use lazy imports to avoid circular dependencies
 # Import only when needed, not at package level
 
-__all__ = ["TweetService", "MCPService"]
+__all__ = ["TweetService", "MCPService", "TaskService"]
