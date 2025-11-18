@@ -16,6 +16,7 @@ from src.agents.agent_mcp.mcp_agent import MCPAgent
 from src.agents.v2.rag_agent_v2 import RAGAgentV2
 from src.agents.v2.linkol_agent_v2 import LinkolAgentV2
 from src.agents.v2.hetu_agent_v2 import HetuAgentV2
+from src.agents.fortune_agent import FortuneAgent
 
 
 # Global instances (initialized in main.py)
@@ -32,6 +33,7 @@ _collection_repo: CollectionRepository = None
 _rag_agent_v2: RAGAgentV2 = None
 _linkol_agent_v2: LinkolAgentV2 = None
 _hetu_agent_v2: HetuAgentV2 = None
+_fortune_agent: FortuneAgent = None
 
 
 def set_dependencies(
@@ -48,9 +50,10 @@ def set_dependencies(
     rag_agent_v2: RAGAgentV2 = None,
     linkol_agent_v2: LinkolAgentV2 = None,
     hetu_agent_v2: HetuAgentV2 = None,
+    fortune_agent: FortuneAgent = None,
 ):
     """Set global dependencies."""
-    global _project_repo, _project_content_repo, _tweet_repo, _tweet_service, _embedding_service, _rag_agent, _linkol_agent, _hetu_agent, _mcp_agent, _collection_repo, _rag_agent_v2, _linkol_agent_v2, _hetu_agent_v2
+    global _project_repo, _project_content_repo, _tweet_repo, _tweet_service, _embedding_service, _rag_agent, _linkol_agent, _hetu_agent, _mcp_agent, _collection_repo, _rag_agent_v2, _linkol_agent_v2, _hetu_agent_v2, _fortune_agent
     _project_repo = project_repo
     _project_content_repo = project_content_repo
     _tweet_repo = tweet_repo
@@ -64,6 +67,7 @@ def set_dependencies(
     _rag_agent_v2 = rag_agent_v2
     _linkol_agent_v2 = linkol_agent_v2
     _hetu_agent_v2 = hetu_agent_v2
+    _fortune_agent = fortune_agent
 
 
 def get_project_repo() -> ProjectRepository:
@@ -116,4 +120,8 @@ def get_linkol_agent_v2() -> LinkolAgentV2:
 
 def get_hetu_agent_v2() -> HetuAgentV2:
     return _hetu_agent_v2
+
+
+def get_fortune_agent() -> FortuneAgent:
+    return _fortune_agent
 

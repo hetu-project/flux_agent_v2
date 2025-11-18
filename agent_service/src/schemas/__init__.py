@@ -27,6 +27,10 @@ from .task_schema import (
     TaskListRequest,
     TaskListResponse,
 )
+from .fortune_schema import (
+    FortuneRequest,
+    FortuneResponse,
+)
 
 __all__ = [
     "CollectTweetsRequest",
@@ -46,5 +50,7 @@ __all__ = [
     "ProjectListResponse",
     "TaskListRequest",
     "TaskListResponse",
+    "FortuneRequest",
+    "FortuneResponse",
 ]
 

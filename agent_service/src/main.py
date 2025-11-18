@@ -24,6 +24,7 @@ from src.agents.agent_mcp.mcp_agent import MCPAgent
 from src.agents.v2.rag_agent_v2 import RAGAgentV2
 from src.agents.v2.linkol_agent_v2 import LinkolAgentV2
 from src.agents.v2.hetu_agent_v2 import HetuAgentV2
+from src.agents.fortune_agent import FortuneAgent
 
 # Import API routes
 from src.api.v1 import projects, tweets, chat, collections, project_content
@@ -110,6 +111,9 @@ hetu_agent_v2 = HetuAgentV2(
     tweet_repo=tweet_repo
 )
 
+# Initialize Fortune agent
+fortune_agent = FortuneAgent()
+
 # Initialize business services
 tweet_service = TweetService(
     tweet_repo=tweet_repo,
@@ -134,6 +138,7 @@ set_dependencies(
     rag_agent_v2=rag_agent_v2,
     linkol_agent_v2=linkol_agent_v2,
     hetu_agent_v2=hetu_agent_v2,
+    fortune_agent=fortune_agent,
 )
 logger.info("Dependencies set successfully")
 

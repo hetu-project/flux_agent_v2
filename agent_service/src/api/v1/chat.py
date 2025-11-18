@@ -5,8 +5,9 @@ from src.agents.rag_agent import RAGAgent
 from src.agents.linkol_agent import LinkolAgent
 from src.agents.hetu_agent import HetuAgent
 from src.agents.agent_mcp.mcp_agent import MCPAgent
+from src.agents.fortune_agent import FortuneAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
-from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent
+from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_fortune_agent
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -305,5 +306,89 @@ async def chat_mcp(
         
     except Exception as e:
         logger.error(f"Error processing MCP chat request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/fortune", response_model=ChatResponse)
+async def chat_fortune(
+    request: ChatRequest,
+    http_request: Request,
+    fortune_agent: FortuneAgent = Depends(get_fortune_agent),
+):
+    """
+    Chat with the Fortune Telling agent.
+    
+    The agent will extract name, birth year, and zodiac sign from the conversation.
+    If information is incomplete, it will ask the user to provide missing information.
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "我叫张三，1990年出生，白羊座，帮我算一下明天的运势"}
+        ]
+    }
+    
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
+    
+    Returns OpenAI-compatible response format:
+    {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "明天的运势预测..."
+                }
+            }
+        ]
+    }
+    """
+    try:
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
+        
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        
+        # Convert messages to conversation history format
+        conversation_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages
+        ]
+        
+        logger.info(
+            f"Fortune prediction request received: query='{user_query[:100]}...', "
+            f"model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+        )
+        
+        result = await fortune_agent.query(
+            user_query=user_query,
+            conversation_history=conversation_history,
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        logger.info("Fortune prediction generated successfully")
+        
+        # Format response in OpenAI-compatible format (consistent with other agents)
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing fortune prediction request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
