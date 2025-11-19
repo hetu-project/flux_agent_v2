@@ -44,6 +44,9 @@ env/
 # Qdrant storage
 qdrant_storage/
 
+# PostgreSQL data
+postgres_data/
+
 # Logs
 *.log
 logs/

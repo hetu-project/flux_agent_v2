@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     messages: List[Message] = Field(..., description="List of chat messages", min_length=1)
     project: Optional[str] = Field(None, description="Project name to filter (optional)")
     top_k: int = Field(5, ge=1, le=20, description="Number of documents to retrieve")
+    session_id: Optional[str] = Field(None, description="Session ID for maintaining conversation context (optional)")
     
     def get_user_query(self) -> str:
         """

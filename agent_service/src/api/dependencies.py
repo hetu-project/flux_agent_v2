@@ -13,10 +13,13 @@ from src.agents.rag_agent import RAGAgent
 from src.agents.linkol_agent import LinkolAgent
 from src.agents.hetu_agent import HetuAgent
 from src.agents.agent_mcp.mcp_agent import MCPAgent
+from src.agents.agent_mcp.hetu_agent import HetuMCPAgent
 from src.agents.v2.rag_agent_v2 import RAGAgentV2
 from src.agents.v2.linkol_agent_v2 import LinkolAgentV2
 from src.agents.v2.hetu_agent_v2 import HetuAgentV2
 from src.agents.fortune_agent import FortuneAgent
+from src.agents.health_agent import HealthAgent
+from src.agents.bazi_agent import BaziAgent
 
 
 # Global instances (initialized in main.py)
@@ -29,11 +32,14 @@ _rag_agent: RAGAgent = None
 _linkol_agent: LinkolAgent = None
 _hetu_agent: HetuAgent = None
 _mcp_agent: MCPAgent = None
+_hetu_mcp_agent: HetuMCPAgent = None
 _collection_repo: CollectionRepository = None
 _rag_agent_v2: RAGAgentV2 = None
 _linkol_agent_v2: LinkolAgentV2 = None
 _hetu_agent_v2: HetuAgentV2 = None
 _fortune_agent: FortuneAgent = None
+_health_agent: HealthAgent = None
+_bazi_agent: BaziAgent = None
 
 
 def set_dependencies(
@@ -51,9 +57,12 @@ def set_dependencies(
     linkol_agent_v2: LinkolAgentV2 = None,
     hetu_agent_v2: HetuAgentV2 = None,
     fortune_agent: FortuneAgent = None,
+    hetu_mcp_agent: HetuMCPAgent = None,
+    health_agent: HealthAgent = None,
+    bazi_agent: BaziAgent = None,
 ):
     """Set global dependencies."""
-    global _project_repo, _project_content_repo, _tweet_repo, _tweet_service, _embedding_service, _rag_agent, _linkol_agent, _hetu_agent, _mcp_agent, _collection_repo, _rag_agent_v2, _linkol_agent_v2, _hetu_agent_v2, _fortune_agent
+    global _project_repo, _project_content_repo, _tweet_repo, _tweet_service, _embedding_service, _rag_agent, _linkol_agent, _hetu_agent, _mcp_agent, _hetu_mcp_agent, _collection_repo, _rag_agent_v2, _linkol_agent_v2, _hetu_agent_v2, _fortune_agent, _health_agent, _bazi_agent
     _project_repo = project_repo
     _project_content_repo = project_content_repo
     _tweet_repo = tweet_repo
@@ -63,11 +72,14 @@ def set_dependencies(
     _linkol_agent = linkol_agent
     _hetu_agent = hetu_agent
     _mcp_agent = mcp_agent
+    _hetu_mcp_agent = hetu_mcp_agent
     _collection_repo = collection_repo
     _rag_agent_v2 = rag_agent_v2
     _linkol_agent_v2 = linkol_agent_v2
     _hetu_agent_v2 = hetu_agent_v2
     _fortune_agent = fortune_agent
+    _health_agent = health_agent
+    _bazi_agent = bazi_agent
 
 
 def get_project_repo() -> ProjectRepository:
@@ -124,4 +136,16 @@ def get_hetu_agent_v2() -> HetuAgentV2:
 
 def get_fortune_agent() -> FortuneAgent:
     return _fortune_agent
+
+
+def get_hetu_mcp_agent() -> HetuMCPAgent:
+    return _hetu_mcp_agent
+
+
+def get_health_agent() -> HealthAgent:
+    return _health_agent
+
+
+def get_bazi_agent() -> BaziAgent:
+    return _bazi_agent
 

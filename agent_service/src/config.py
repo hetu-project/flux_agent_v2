@@ -18,6 +18,23 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     
+    # PostgreSQL Database
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_db: str = "hetu_agent"
+    postgres_user: str = "hetu_user"
+    postgres_password: str = "hetu_password"
+    
+    @property
+    def postgres_url(self) -> str:
+        """Get PostgreSQL database URL."""
+        return f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+    
+    @property
+    def postgres_url_async(self) -> str:
+        """Get PostgreSQL async database URL."""
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+    
     # AIHubMix Settings (从环境变量读取)
     aihubmix_api_key: str = ""
     aihubmix_base_url: str = "https://aihubmix.com/v1"

@@ -5,9 +5,12 @@ from src.agents.rag_agent import RAGAgent
 from src.agents.linkol_agent import LinkolAgent
 from src.agents.hetu_agent import HetuAgent
 from src.agents.agent_mcp.mcp_agent import MCPAgent
+from src.agents.agent_mcp.hetu_agent import HetuMCPAgent
 from src.agents.fortune_agent import FortuneAgent
+from src.agents.health_agent import HealthAgent
+from src.agents.bazi_agent import BaziAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
-from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_fortune_agent
+from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_hetu_mcp_agent, get_fortune_agent, get_health_agent, get_bazi_agent
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -309,6 +312,74 @@ async def chat_mcp(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/mcp/hetu", response_model=ChatResponse)
+async def chat_mcp_hetu(
+    request: ChatRequest,
+    http_request: Request,
+    hetu_mcp_agent: HetuMCPAgent = Depends(get_hetu_mcp_agent),
+):
+    """
+    Chat with the Hetu Protocol MCP agent.
+    
+    This agent uses MCP (Model Context Protocol) service for tool calling instead of function calling.
+    It is specialized in answering questions about Hetu Protocol and will:
+    1. Always use Hetu Protocol project information from database
+    2. Search for relevant content related to Hetu Protocol
+    3. Get available MCP tools and let LLM choose appropriate tools to call
+    4. Call MCP tools to get additional information
+    5. Generate response as a Hetu Protocol introducer
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "your question about Hetu Protocol"}
+        ],
+        "top_k": 5  // Optional, number of documents to retrieve
+    }
+    
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
+    """
+    try:
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
+        
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        logger.info(f"Hetu MCP chat request received: query='{user_query[:100]}...', model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}")
+        
+        result = await hetu_mcp_agent.query(
+            user_question=user_query,
+            top_k=request.top_k,
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        logger.info(f"Hetu MCP chat response generated successfully")
+        
+        # Format response in OpenAI-compatible format
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing Hetu MCP chat request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/fortune", response_model=ChatResponse)
 async def chat_fortune(
     request: ChatRequest,
@@ -356,6 +427,9 @@ async def chat_fortune(
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
         
+        # Get session_id from request body (only use memory if session_id is explicitly provided)
+        session_id = request.session_id
+        
         # Convert messages to conversation history format
         conversation_history = [
             {"role": msg.role, "content": msg.content}
@@ -364,12 +438,13 @@ async def chat_fortune(
         
         logger.info(
             f"Fortune prediction request received: query='{user_query[:100]}...', "
-            f"model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+            f"session_id={session_id or 'none (no memory)'}, model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
         )
         
         result = await fortune_agent.query(
             user_query=user_query,
             conversation_history=conversation_history,
+            session_id=session_id,
             api_key=api_key,
             base_url=base_url
         )
@@ -390,5 +465,195 @@ async def chat_fortune(
         
     except Exception as e:
         logger.error(f"Error processing fortune prediction request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/health", response_model=ChatResponse)
+async def chat_health(
+    request: ChatRequest,
+    http_request: Request,
+    health_agent: HealthAgent = Depends(get_health_agent),
+):
+    """
+    Chat with the Health agent.
+    
+    The agent provides health-related consultations and advice, including:
+    - Nutrition advice
+    - Exercise recommendations
+    - Mental health support
+    - Common disease prevention
+    - General health tips
+    
+    Important: The agent provides general health information and advice only.
+    It does not provide medical diagnosis. For serious symptoms, users should
+    consult professional doctors.
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "我最近总是感觉很累，有什么建议吗？"}
+        ]
+    }
+    
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
+    
+    Returns OpenAI-compatible response format:
+    {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "健康建议..."
+                }
+            }
+        ]
+    }
+    """
+    try:
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
+        
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        
+        # Convert messages to conversation history format
+        conversation_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages
+        ]
+        
+        logger.info(
+            f"Health consultation request received: query='{user_query[:100]}...', "
+            f"model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+        )
+        
+        result = await health_agent.query(
+            user_query=user_query,
+            conversation_history=conversation_history,
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        logger.info("Health consultation generated successfully")
+        
+        # Format response in OpenAI-compatible format (consistent with other agents)
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing health consultation request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bazi", response_model=ChatResponse)
+async def chat_bazi(
+    request: ChatRequest,
+    http_request: Request,
+    bazi_agent: BaziAgent = Depends(get_bazi_agent),
+):
+    """
+    Chat with the Bazi (Eight Characters) agent.
+    
+    The agent will extract birth information (lunar calendar date, time, and location) from the conversation.
+    If information is incomplete, it will ask the user to provide missing information.
+    
+    Required information:
+    - Birth year (lunar calendar)
+    - Birth month (lunar calendar, 1-12)
+    - Birth day (lunar calendar, 1-31)
+    - Birth hour (0-23)
+    - Birth minute (0-59)
+    - Birth location (city name)
+    - Current location (city name)
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "我1990年农历5月15日14时30分在北京出生，现在在上海，帮我算一下八字"}
+        ],
+        "session_id": "optional-session-id"  // Optional, for maintaining conversation context
+    }
+    
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
+    
+    Returns OpenAI-compatible response format:
+    {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "八字计算结果..."
+                }
+            }
+        ]
+    }
+    """
+    try:
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
+        
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        
+        # Get session_id from request body (only use memory if session_id is explicitly provided)
+        session_id = request.session_id
+        
+        # Convert messages to conversation history format
+        conversation_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages
+        ]
+        
+        logger.info(
+            f"Bazi calculation request received: query='{user_query[:100]}...', "
+            f"session_id={session_id or 'none (no memory)'}, model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+        )
+        
+        result = await bazi_agent.query(
+            user_query=user_query,
+            conversation_history=conversation_history,
+            session_id=session_id,
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        logger.info("Bazi calculation generated successfully")
+        
+        # Format response in OpenAI-compatible format (consistent with other agents)
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing bazi calculation request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
