@@ -9,8 +9,9 @@ from src.agents.agent_mcp.hetu_agent import HetuMCPAgent
 from src.agents.fortune_agent import FortuneAgent
 from src.agents.health_agent import HealthAgent
 from src.agents.bazi_agent import BaziAgent
+from src.agents.crypto_agent import CryptoAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
-from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_hetu_mcp_agent, get_fortune_agent, get_health_agent, get_bazi_agent
+from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_hetu_mcp_agent, get_fortune_agent, get_health_agent, get_bazi_agent, get_crypto_agent
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -655,5 +656,98 @@ async def chat_bazi(
         
     except Exception as e:
         logger.error(f"Error processing bazi calculation request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/crypto", response_model=ChatResponse)
+async def chat_crypto(
+    request: ChatRequest,
+    http_request: Request,
+    crypto_agent: CryptoAgent = Depends(get_crypto_agent),
+):
+    """
+    Chat with the Crypto agent.
+    
+    The agent provides cryptocurrency-related consultations and advice, including:
+    - Cryptocurrency basics (Bitcoin, Ethereum, etc.)
+    - Blockchain technology principles
+    - Investment advice and risk warnings
+    - Market analysis and trends
+    - DeFi, NFT, Web3 introduction
+    - Wallet usage and security advice
+    
+    Important: The agent provides educational information and general advice only.
+    It does not provide specific investment advice or price predictions. Users should
+    do their own research (DYOR) and invest cautiously.
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "什么是比特币？"}
+        ]
+    }
+    
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
+    
+    Returns OpenAI-compatible response format:
+    {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "加密货币建议..."
+                }
+            }
+        ]
+    }
+    """
+    try:
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
+        
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        
+        # Convert messages to conversation history format
+        conversation_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages
+        ]
+        
+        logger.info(
+            f"Crypto consultation request received: query='{user_query[:100]}...', "
+            f"model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+        )
+        
+        result = await crypto_agent.query(
+            user_query=user_query,
+            conversation_history=conversation_history,
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        logger.info("Crypto consultation generated successfully")
+        
+        # Format response in OpenAI-compatible format (consistent with other agents)
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing crypto consultation request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
