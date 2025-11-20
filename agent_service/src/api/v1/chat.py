@@ -10,8 +10,9 @@ from src.agents.fortune_agent import FortuneAgent
 from src.agents.health_agent import HealthAgent
 from src.agents.bazi_agent import BaziAgent
 from src.agents.crypto_agent import CryptoAgent
+from src.agents.company_agent import CompanyAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
-from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_hetu_mcp_agent, get_fortune_agent, get_health_agent, get_bazi_agent, get_crypto_agent
+from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_hetu_mcp_agent, get_fortune_agent, get_health_agent, get_bazi_agent, get_crypto_agent, get_company_agent
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -749,5 +750,102 @@ async def chat_crypto(
         
     except Exception as e:
         logger.error(f"Error processing crypto consultation request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/company", response_model=ChatResponse)
+async def chat_company(
+    request: ChatRequest,
+    http_request: Request,
+    company_agent: CompanyAgent = Depends(get_company_agent),
+):
+    """
+    Chat with the Company agent for companionship and daily conversation.
+    
+    The agent provides emotional companionship, daily conversation, and support, including:
+    - Emotional companionship and listening
+    - Daily conversation and chat
+    - Encouragement and support
+    - Sharing interesting topics
+    - Helping relieve stress and loneliness
+    - Positive emotional support
+    
+    This agent is designed to be warm, friendly, and empathetic, like a friend.
+    It maintains conversation context through session_id for more natural dialogue.
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "今天心情不太好"}
+        ],
+        "session_id": "optional-session-id"  // Optional, for maintaining conversation context
+    }
+    
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
+    
+    Returns OpenAI-compatible response format:
+    {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "陪伴回复..."
+                }
+            }
+        ]
+    }
+    """
+    try:
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
+        
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        
+        # Get session_id from request body (only use memory if session_id is explicitly provided)
+        session_id = request.session_id
+        
+        # Convert messages to conversation history format
+        conversation_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.messages
+        ]
+        
+        logger.info(
+            f"Company companionship request received: query='{user_query[:100]}...', "
+            f"session_id={session_id or 'none (no memory)'}, model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+        )
+        
+        result = await company_agent.query(
+            user_query=user_query,
+            conversation_history=conversation_history,
+            session_id=session_id,
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        logger.info("Company companionship response generated successfully")
+        
+        # Format response in OpenAI-compatible format (consistent with other agents)
+        message = ChatMessage(
+            role="assistant",  # Hardcoded as assistant
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing company companionship request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
