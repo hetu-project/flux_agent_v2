@@ -11,8 +11,9 @@ from src.agents.health_agent import HealthAgent
 from src.agents.bazi_agent import BaziAgent
 from src.agents.crypto_agent import CryptoAgent
 from src.agents.company_agent import CompanyAgent
+from src.agents.tarot_agent import TarotAgent
 from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
-from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_hetu_mcp_agent, get_fortune_agent, get_health_agent, get_bazi_agent, get_crypto_agent, get_company_agent
+from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_hetu_mcp_agent, get_fortune_agent, get_health_agent, get_bazi_agent, get_crypto_agent, get_company_agent, get_tarot_agent
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -386,19 +387,19 @@ async def chat_mcp_hetu(
 async def chat_fortune(
     request: ChatRequest,
     http_request: Request,
-    fortune_agent: FortuneAgent = Depends(get_fortune_agent),
+    tarot_agent: TarotAgent = Depends(get_tarot_agent),
 ):
     """
-    Chat with the Fortune Telling agent.
+    Chat with the Tarot card reading agent (replaces Fortune Telling agent).
     
-    The agent will extract name, birth year, and zodiac sign from the conversation.
-    If information is incomplete, it will ask the user to provide missing information.
+    Simple version: single interaction, automatic 3-card spread (Past-Present-Future).
+    The agent will automatically draw cards and provide a complete reading based on the user's question.
     
     Accepts OpenAI-compatible request format:
     {
         "model": "any-model-name",  // Ignored
         "messages": [
-            {"role": "user", "content": "我叫张三，1990年出生，白羊座，帮我算一下明天的运势"}
+            {"role": "user", "content": "我想知道我的感情运势如何？"}
         ]
     }
     
@@ -410,7 +411,7 @@ async def chat_fortune(
             {
                 "message": {
                     "role": "assistant",
-                    "content": "明天的运势预测..."
+                    "content": "🔮 塔罗牌占卜结果..."
                 }
             }
         ]
@@ -429,33 +430,22 @@ async def chat_fortune(
         # Extract user query from messages (get last message content)
         user_query = request.get_user_query()
         
-        # Get session_id from request body (only use memory if session_id is explicitly provided)
-        session_id = request.session_id
-        
-        # Convert messages to conversation history format
-        conversation_history = [
-            {"role": msg.role, "content": msg.content}
-            for msg in request.messages
-        ]
-        
         logger.info(
-            f"Fortune prediction request received: query='{user_query[:100]}...', "
-            f"session_id={session_id or 'none (no memory)'}, model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+            f"Tarot reading request received (via /fortune endpoint): query='{user_query[:100]}...', "
+            f"model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
         )
         
-        result = await fortune_agent.query(
+        result = await tarot_agent.query(
             user_query=user_query,
-            conversation_history=conversation_history,
-            session_id=session_id,
             api_key=api_key,
             base_url=base_url
         )
         
-        logger.info("Fortune prediction generated successfully")
+        logger.info("Tarot reading response generated successfully")
         
-        # Format response in OpenAI-compatible format (consistent with other agents)
+        # Format response in OpenAI-compatible format
         message = ChatMessage(
-            role="assistant",  # Hardcoded as assistant
+            role="assistant",
             content=result["answer"]
         )
         
@@ -466,7 +456,7 @@ async def chat_fortune(
         )
         
     except Exception as e:
-        logger.error(f"Error processing fortune prediction request: {e}", exc_info=True)
+        logger.error(f"Error processing tarot reading request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -847,5 +837,82 @@ async def chat_company(
         
     except Exception as e:
         logger.error(f"Error processing company companionship request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tarot", response_model=ChatResponse)
+async def chat_tarot(
+    request: ChatRequest,
+    http_request: Request,
+    tarot_agent: TarotAgent = Depends(get_tarot_agent),
+):
+    """
+    Chat with the Tarot card reading agent.
+    
+    Simple version: single interaction, automatic 3-card spread (Past-Present-Future).
+    The agent will automatically draw cards and provide a complete reading.
+    
+    Accepts OpenAI-compatible request format:
+    {
+        "model": "any-model-name",  // Ignored
+        "messages": [
+            {"role": "user", "content": "我想知道我的感情运势如何？"}
+        ]
+    }
+    
+    Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
+    
+    Returns OpenAI-compatible response format:
+    {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "🔮 塔罗牌占卜结果..."
+                }
+            }
+        ]
+    }
+    """
+    try:
+        # Extract API key from Authorization Bearer header (if provided, uses custom API)
+        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+        api_key = extract_api_key_from_auth_header(auth_header)
+        
+        # Set base_url if API key is provided
+        base_url = None
+        if api_key:
+            base_url = "https://aiclub.v1.hetu.org/v1"
+        
+        # Extract user query from messages (get last message content)
+        user_query = request.get_user_query()
+        
+        logger.info(
+            f"Tarot reading request received: query='{user_query[:100]}...', "
+            f"model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+        )
+        
+        result = await tarot_agent.query(
+            user_query=user_query,
+            api_key=api_key,
+            base_url=base_url
+        )
+        
+        logger.info("Tarot reading response generated successfully")
+        
+        # Format response in OpenAI-compatible format
+        message = ChatMessage(
+            role="assistant",
+            content=result["answer"]
+        )
+        
+        choice = Choice(message=message)
+        
+        return ChatResponse(
+            choices=[choice]
+        )
+        
+    except Exception as e:
+        logger.error(f"Error processing tarot reading request: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 

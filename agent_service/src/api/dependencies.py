@@ -22,6 +22,7 @@ from src.agents.health_agent import HealthAgent
 from src.agents.bazi_agent import BaziAgent
 from src.agents.crypto_agent import CryptoAgent
 from src.agents.company_agent import CompanyAgent
+from src.agents.tarot_agent import TarotAgent
 
 
 # Global instances (initialized in main.py)
@@ -44,6 +45,7 @@ _health_agent: HealthAgent = None
 _bazi_agent: BaziAgent = None
 _crypto_agent: CryptoAgent = None
 _company_agent: CompanyAgent = None
+_tarot_agent: TarotAgent = None
 
 
 def set_dependencies(
@@ -66,9 +68,10 @@ def set_dependencies(
     bazi_agent: BaziAgent = None,
     crypto_agent: CryptoAgent = None,
     company_agent: CompanyAgent = None,
+    tarot_agent: TarotAgent = None,
 ):
     """Set global dependencies."""
-    global _project_repo, _project_content_repo, _tweet_repo, _tweet_service, _embedding_service, _rag_agent, _linkol_agent, _hetu_agent, _mcp_agent, _hetu_mcp_agent, _collection_repo, _rag_agent_v2, _linkol_agent_v2, _hetu_agent_v2, _fortune_agent, _health_agent, _bazi_agent, _crypto_agent, _company_agent
+    global _project_repo, _project_content_repo, _tweet_repo, _tweet_service, _embedding_service, _rag_agent, _linkol_agent, _hetu_agent, _mcp_agent, _hetu_mcp_agent, _collection_repo, _rag_agent_v2, _linkol_agent_v2, _hetu_agent_v2, _fortune_agent, _health_agent, _bazi_agent, _crypto_agent, _company_agent, _tarot_agent
     _project_repo = project_repo
     _project_content_repo = project_content_repo
     _tweet_repo = tweet_repo
@@ -88,6 +91,7 @@ def set_dependencies(
     _bazi_agent = bazi_agent
     _crypto_agent = crypto_agent
     _company_agent = company_agent
+    _tarot_agent = tarot_agent
 
 
 def get_project_repo() -> ProjectRepository:
@@ -164,4 +168,8 @@ def get_crypto_agent() -> CryptoAgent:
 
 def get_company_agent() -> CompanyAgent:
     return _company_agent
+
+
+def get_tarot_agent() -> TarotAgent:
+    return _tarot_agent
 
