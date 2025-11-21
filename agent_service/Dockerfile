@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN pip install poetry
+# Install Poetry and upgrade packaging to fix compatibility issues
+RUN pip install poetry && pip install --upgrade packaging
 
 # Copy poetry files (poetry.lock is optional)
 COPY pyproject.toml ./
@@ -25,6 +25,10 @@ RUN poetry config virtualenvs.create false && \
 
 # Copy source code
 COPY src/ ./src/
+
+# Copy alembic configuration and migrations
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
 
 # Expose port
 EXPOSE 8000

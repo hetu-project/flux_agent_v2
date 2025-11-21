@@ -1,24 +1,22 @@
 services:
-  # PostgreSQL Database (temporarily disabled)
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: hetu-postgres
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - ./postgres_data:/var/lib/postgresql/data
-  #   environment:
-  #     - POSTGRES_DB=hetu_agent
-  #     - POSTGRES_USER=hetu_user
-  #     - POSTGRES_PASSWORD=hetu_password
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U hetu_user -d hetu_agent"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-  #   networks:
-  #     - hetu-network
-  #   restart: unless-stopped
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: hetu-postgres
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=hetu_agent
+      - POSTGRES_USER=hetu_user
+      - POSTGRES_PASSWORD=hetu_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hetu_user -d hetu_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hetu-network
+    restart: unless-stopped
 
   # Qdrant Vector Database
   qdrant:
@@ -60,8 +58,8 @@ services:
       - POSTGRES_USER=hetu_user
       - POSTGRES_PASSWORD=hetu_password
     depends_on:
-      # postgres:
-      #   condition: service_healthy
+      postgres:
+        condition: service_healthy
       qdrant:
         condition: service_started
       mcp:

@@ -579,49 +579,9 @@ Return only JSON, no other text."""
         is_bazi_related = extracted_info.get("is_bazi_related", True)
         if not is_bazi_related:
             if language == "zh":
-                reminder = """我是一个八字（四柱八字）计算助手，专门帮助用户计算和分析八字命理。
-
-我可以根据您的出生信息（阴历/农历）计算八字，包括：
-- 四柱八字（年柱、月柱、日柱、时柱）
-- 天干地支的详细说明
-- 五行分析（金、木、水、火、土）
-- 命理特点分析
-- 性格特征
-- 运势建议
-
-请在提问中提供以下信息（所有时间都是阴历/农历）：
-- 您的出生年份（例如：1990）
-- 您的出生月份（1-12月）
-- 您的出生日期（1-31日）
-- 您的出生小时（0-23时）
-- 您的出生分钟（0-59分）
-- 您的出生地点（例如：北京、上海）
-- 您现在所在的地点（例如：北京、上海）
-
-例如：
-"我1990年农历5月15日14时30分在北京出生，现在在上海，帮我算一下八字" """
+                reminder = """我是八字（四柱八字）计算助手，可根据您的出生信息（阴历/农历：年份、月份、日期、出生地点、现居地点）为您计算八字并进行分析，出生时间（小时、分钟）为可选信息，提供后计算精度更高。"""
             else:
-                reminder = """I am a Bazi (Eight Characters) calculation assistant, specialized in helping users calculate and analyze Bazi Chinese astrology.
-
-I can calculate Bazi based on your birth information (lunar calendar), including:
-- Four Pillars (Year, Month, Day, Hour pillars)
-- Detailed explanation of Heavenly Stems and Earthly Branches
-- Five Elements analysis (Metal, Wood, Water, Fire, Earth)
-- Destiny characteristics analysis
-- Personality traits
-- Fortune suggestions
-
-Please include the following information in your question (all times are in lunar calendar):
-- Your birth year (e.g., 1990)
-- Your birth month (1-12)
-- Your birth day (1-31)
-- Your birth hour (0-23)
-- Your birth minute (0-59)
-- Your birth location (e.g., Beijing, Shanghai)
-- Your current location (e.g., Beijing, Shanghai)
-
-For example:
-"I was born on May 15, 1990 at 14:30 in Beijing (lunar calendar), now in Shanghai, please calculate my Bazi" """
+                reminder = """I am a Bazi (Eight Characters) calculation assistant. I can calculate and analyze Bazi based on your birth information (lunar calendar: year, month, day, birth location, current location). Birth time (hour and minute) is optional; providing it will result in more precise calculations."""
             
             return {
                 "answer": reminder

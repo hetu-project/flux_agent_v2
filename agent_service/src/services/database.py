@@ -2,7 +2,7 @@
 
 from sqlalchemy import create_engine, Engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase
 from contextlib import asynccontextmanager, contextmanager
 from typing import AsyncGenerator, Generator
 from src.config import get_settings
@@ -10,6 +10,11 @@ from src.utils.logger import get_logger
 
 settings = get_settings()
 logger = get_logger(__name__)
+
+
+class Base(DeclarativeBase):
+    """Base class for all SQLAlchemy models."""
+    pass
 
 # Global engine instances
 _sync_engine: Engine | None = None
