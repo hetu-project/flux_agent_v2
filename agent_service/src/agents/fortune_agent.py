@@ -29,13 +29,13 @@ class FortuneAgent:
             api_key=settings.aihubmix_api_key,
             base_url=settings.aihubmix_base_url
         )
-        self.chat_model = "google/gemini-2.5-pro"
+        self.chat_model = "gemini-2.0-flash"
         
         # Initialize LangChain ChatOpenAI (default)
         self.langchain_llm = ChatOpenAI(
             api_key=settings.aihubmix_api_key,
             base_url=settings.aihubmix_base_url,
-            model="google/gemini-2.5-pro",
+            model="gemini-2.0-flash",
             temperature=0.3
         )
         
@@ -83,11 +83,11 @@ class FortuneAgent:
         if api_key:
             # Use custom API if provided
             client_base_url = base_url or settings.openrouter_base_url
-            model_name = "google/gemini-2.5-pro"
+            model_name = "gemini-2.0-flash"
         else:
             # Use default AIHubMix
             client_base_url = settings.aihubmix_base_url
-            model_name = "google/gemini-2.5-pro"
+            model_name = "gemini-2.0-flash"
         
         llm_kwargs = {
             "api_key": api_key or settings.aihubmix_api_key,
@@ -874,7 +874,7 @@ Please provide complete and detailed prediction content, ensuring the answer is 
             system_prompt = "You are an experienced astrologer and fortune teller, skilled at predicting various types of fortune based on name, birth year, and zodiac sign. Your prediction style is both mysterious and positive, able to bring hope and guidance to users."
         
         # Select model based on API provider
-        model_name = "google/gemini-2.5-pro"
+        model_name = "gemini-2.0-flash"
         logger.debug(f"Generating fortune prediction (model: {model_name}, language: {language})")
         
         try:

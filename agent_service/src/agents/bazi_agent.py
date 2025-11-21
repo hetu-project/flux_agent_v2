@@ -29,13 +29,13 @@ class BaziAgent:
             api_key=settings.aihubmix_api_key,
             base_url=settings.aihubmix_base_url
         )
-        self.chat_model = settings.chat_model
+        self.chat_model = "gemini-2.0-flash"
         
         # Initialize LangChain ChatOpenAI (default)
         self.langchain_llm = ChatOpenAI(
             api_key=settings.aihubmix_api_key,
             base_url=settings.aihubmix_base_url,
-            model=settings.chat_model,
+            model="gemini-2.0-flash",
             temperature=0.3
         )
         
@@ -83,11 +83,11 @@ class BaziAgent:
         if api_key:
             # Use custom API if provided
             client_base_url = base_url or settings.openrouter_base_url
-            model_name = settings.openrouter_model
+            model_name = "gemini-2.0-flash"
         else:
             # Use default AIHubMix
             client_base_url = settings.aihubmix_base_url
-            model_name = settings.chat_model
+            model_name = "gemini-2.0-flash"
         
         llm_kwargs = {
             "api_key": api_key or settings.aihubmix_api_key,
@@ -766,7 +766,7 @@ For example:
 - **重要：不要在回复中提及任何模型名称、AI名称或生成来源，不要添加类似"以上内容由XXX生成"的说明**"""
         
         # Select model based on API provider
-        model_name = settings.chat_model
+        model_name = "gemini-2.0-flash"
         logger.debug(f"Generating bazi calculation (model: {model_name})")
         
         try:

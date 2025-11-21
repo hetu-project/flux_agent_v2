@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     project: Optional[str] = Field(None, description="Project name to filter (optional)")
     top_k: int = Field(5, ge=1, le=20, description="Number of documents to retrieve")
     session_id: Optional[str] = Field(None, description="Session ID for maintaining conversation context (optional)")
+    user_id: Optional[str] = Field(None, description="User ID for user-specific context management (optional)")
     
     def get_user_query(self) -> str:
         """

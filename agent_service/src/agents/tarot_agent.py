@@ -400,7 +400,8 @@ Just tell me your question, for example:
 - 要结合用户的具体问题来解读
 - 语气要温和、神秘，但也要积极正面
 - 提供实用的建议和指引
-- 控制回答长度在800-1200字之间"""
+- **请务必提供完整详细的回答，确保所有3个部分（整体解读、各张牌的解读、综合指引）都完整呈现，不要中途截断**
+- 回答要详细深入，内容丰富，确保用户能看到完整的塔罗牌解读"""
             
             system_prompt = "你是一位经验丰富的塔罗牌占卜师，精通塔罗牌的各种牌阵和解读方法。你的解读风格既神秘又温暖，能够给用户带来启发和指引。"
         else:
@@ -424,13 +425,16 @@ Notes:
 - Connect the interpretation to the user's specific question
 - Use a warm, mysterious but positive tone
 - Provide practical advice and guidance
-- Keep the response between 800-1200 words"""
+- **Please provide a complete and detailed answer, ensuring all 3 parts (Overall Reading, Individual Card Interpretations, Comprehensive Guidance) are fully presented without truncation**
+- The answer should be detailed and comprehensive, ensuring the user can see the full tarot reading"""
             
             system_prompt = "You are an experienced tarot card reader, skilled in various tarot spreads and interpretation methods. Your reading style is both mysterious and warm, able to provide inspiration and guidance to users."
         
         try:
             # Use LangChain for reading
-            langchain_llm = self._get_langchain_llm(api_key=api_key, base_url=base_url, max_tokens=2000)
+            # Set max_tokens to 4000 to ensure complete response (approximately 2500+ Chinese characters)
+            # Note: Gemini models may use reasoning tokens, so we need more tokens for the actual output
+            langchain_llm = self._get_langchain_llm(api_key=api_key, base_url=base_url, max_tokens=4000)
             
             # Build prompt template
             reading_prompt_template = ChatPromptTemplate.from_messages([
@@ -443,7 +447,19 @@ Notes:
             response = await langchain_llm.ainvoke(messages)
             
             reading_text = response.content
-            logger.info(f"Generated tarot reading (length: {len(reading_text)})")
+            
+            # Log response details for debugging
+            logger.info(f"LLM response received: length={len(reading_text) if reading_text else 0} characters")
+            
+            # Check response object for truncation indicators
+            if hasattr(response, 'response_metadata'):
+                metadata = response.response_metadata
+                if metadata and 'finish_reason' in metadata:
+                    finish_reason = metadata.get('finish_reason')
+                    if finish_reason and finish_reason != 'stop':
+                        logger.warning(f"Response may be incomplete. Finish reason: {finish_reason}")
+            
+            logger.info(f"Generated tarot reading (length: {len(reading_text) if reading_text else 0} characters)")
             
             # Format response
             response_text = reading_text
