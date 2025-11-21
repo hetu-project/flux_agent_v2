@@ -29,13 +29,13 @@ class FortuneAgent:
             api_key=settings.aihubmix_api_key,
             base_url=settings.aihubmix_base_url
         )
-        self.chat_model = settings.chat_model
+        self.chat_model = "google/gemini-2.5-pro"
         
         # Initialize LangChain ChatOpenAI (default)
         self.langchain_llm = ChatOpenAI(
             api_key=settings.aihubmix_api_key,
             base_url=settings.aihubmix_base_url,
-            model=settings.chat_model,
+            model="google/gemini-2.5-pro",
             temperature=0.3
         )
         
@@ -83,11 +83,11 @@ class FortuneAgent:
         if api_key:
             # Use custom API if provided
             client_base_url = base_url or settings.openrouter_base_url
-            model_name = settings.openrouter_model
+            model_name = "google/gemini-2.5-pro"
         else:
             # Use default AIHubMix
             client_base_url = settings.aihubmix_base_url
-            model_name = self.chat_model
+            model_name = "google/gemini-2.5-pro"
         
         llm_kwargs = {
             "api_key": api_key or settings.aihubmix_api_key,
@@ -626,11 +626,37 @@ You can also specify the type of fortune and time range you want to predict, for
                 "answer": reminder
             }
         
-        # If information is incomplete, return reminder
+        # If information is incomplete, return friendly reminder
         if not extracted_info.get("is_complete"):
             missing = extracted_info.get("missing_info", [])
             
             if language == "zh":
+                # Build response with friendly tone
+                response_parts = []
+                
+                # First, acknowledge what we already have
+                collected_info = []
+                if extracted_info.get("name"):
+                    collected_info.append(f"姓名：{extracted_info.get('name')}")
+                if extracted_info.get("birth_year"):
+                    collected_info.append(f"出生年份：{extracted_info.get('birth_year')}年")
+                if extracted_info.get("zodiac_sign"):
+                    zodiac_display = extracted_info.get('zodiac_sign')
+                    # Convert English zodiac to Chinese if needed
+                    zodiac_map = {
+                        'Aries': '白羊座', 'Taurus': '金牛座', 'Gemini': '双子座',
+                        'Cancer': '巨蟹座', 'Leo': '狮子座', 'Virgo': '处女座',
+                        'Libra': '天秤座', 'Scorpio': '天蝎座', 'Sagittarius': '射手座',
+                        'Capricorn': '摩羯座', 'Aquarius': '水瓶座', 'Pisces': '双鱼座'
+                    }
+                    if zodiac_display in zodiac_map:
+                        zodiac_display = zodiac_map[zodiac_display]
+                    collected_info.append(f"星座：{zodiac_display}")
+                
+                if collected_info:
+                    response_parts.append(f"好的，我已经了解到：{', '.join(collected_info)}。")
+                
+                # Then, directly tell what's missing
                 missing_chinese = {
                     "name": "姓名",
                     "birth_year": "出生年份",
@@ -638,25 +664,41 @@ You can also specify the type of fortune and time range you want to predict, for
                 }
                 missing_list = [missing_chinese.get(m, m) for m in missing]
                 
-                reminder = f"为了给您进行运势预测，请在提问中提供以下信息：{', '.join(missing_list)}。\n\n请告诉我：\n"
+                if len(missing) == 1:
+                    response_parts.append(f"为了给您进行运势预测，我还需要您的{missing_list[0]}。")
+                else:
+                    response_parts.append(f"为了给您进行运势预测，我还需要您的{', '.join(missing_list[:-1])}和{missing_list[-1]}。")
+                
+                # Provide specific examples
+                response_parts.append("\n请告诉我：")
                 if "name" in missing:
-                    reminder += "- 您的姓名\n"
+                    response_parts.append("• 您的姓名（例如：张三、李四）")
                 if "birth_year" in missing:
-                    reminder += "- 您的出生年份（例如：1990）\n"
+                    response_parts.append("• 您的出生年份（例如：1990、2000）")
                 if "zodiac_sign" in missing:
-                    reminder += "- 您的星座（例如：白羊座、Aries等）\n"
+                    response_parts.append("• 您的星座（例如：白羊座、金牛座、Aries、Taurus等）")
                 
-                reminder += "\n您可以在提问中同时说明想要预测的运势类型（如：整体运势、桃花运、事业运、财运等）和时间范围（如：明天、下周、下个月等）。"
+                # Add optional info hint
+                response_parts.append("\n💡 提示：您也可以告诉我想要预测的运势类型（如：整体运势、桃花运、事业运、财运、健康运等）和时间范围（如：明天、下周、下个月等）。")
                 
-                # Format as text response (consistent with other agents)
-                response_text = reminder
-                if extracted_info.get("name"):
-                    response_text = f"已获取信息：姓名 {extracted_info.get('name')}\n\n" + response_text
-                if extracted_info.get("birth_year"):
-                    response_text = f"已获取信息：出生年份 {extracted_info.get('birth_year')}\n\n" + response_text
-                if extracted_info.get("zodiac_sign"):
-                    response_text = f"已获取信息：星座 {extracted_info.get('zodiac_sign')}\n\n" + response_text
+                response_text = "\n".join(response_parts)
             else:
+                # English version
+                response_parts = []
+                
+                # First, acknowledge what we already have
+                collected_info = []
+                if extracted_info.get("name"):
+                    collected_info.append(f"Name: {extracted_info.get('name')}")
+                if extracted_info.get("birth_year"):
+                    collected_info.append(f"Birth year: {extracted_info.get('birth_year')}")
+                if extracted_info.get("zodiac_sign"):
+                    collected_info.append(f"Zodiac sign: {extracted_info.get('zodiac_sign')}")
+                
+                if collected_info:
+                    response_parts.append(f"Great! I've got: {', '.join(collected_info)}.")
+                
+                # Then, directly tell what's missing
                 missing_english = {
                     "name": "name",
                     "birth_year": "birth year",
@@ -664,24 +706,24 @@ You can also specify the type of fortune and time range you want to predict, for
                 }
                 missing_list = [missing_english.get(m, m) for m in missing]
                 
-                reminder = f"To provide you with a fortune prediction, please include the following information in your question: {', '.join(missing_list)}.\n\nPlease tell me:\n"
+                if len(missing) == 1:
+                    response_parts.append(f"To provide you with a fortune prediction, I still need your {missing_list[0]}.")
+                else:
+                    response_parts.append(f"To provide you with a fortune prediction, I still need your {', '.join(missing_list[:-1])} and {missing_list[-1]}.")
+                
+                # Provide specific examples
+                response_parts.append("\nPlease tell me:")
                 if "name" in missing:
-                    reminder += "- Your name\n"
+                    response_parts.append("• Your name (e.g., John, Mary)")
                 if "birth_year" in missing:
-                    reminder += "- Your birth year (e.g., 1990)\n"
+                    response_parts.append("• Your birth year (e.g., 1990, 2000)")
                 if "zodiac_sign" in missing:
-                    reminder += "- Your zodiac sign (e.g., Aries, 白羊座, etc.)\n"
+                    response_parts.append("• Your zodiac sign (e.g., Aries, Taurus, 白羊座, 金牛座, etc.)")
                 
-                reminder += "\nYou can also specify the type of fortune you want to predict (e.g., overall fortune, love fortune, career fortune, wealth fortune, etc.) and the time range (e.g., tomorrow, next week, next month, etc.) in your question."
+                # Add optional info hint
+                response_parts.append("\n💡 Tip: You can also tell me the type of fortune you want to predict (e.g., overall fortune, love fortune, career fortune, wealth fortune, health fortune, etc.) and the time range (e.g., tomorrow, next week, next month, etc.).")
                 
-                # Format as text response (consistent with other agents)
-                response_text = reminder
-                if extracted_info.get("name"):
-                    response_text = f"Information received: Name {extracted_info.get('name')}\n\n" + response_text
-                if extracted_info.get("birth_year"):
-                    response_text = f"Information received: Birth year {extracted_info.get('birth_year')}\n\n" + response_text
-                if extracted_info.get("zodiac_sign"):
-                    response_text = f"Information received: Zodiac sign {extracted_info.get('zodiac_sign')}\n\n" + response_text
+                response_text = "\n".join(response_parts)
             
             return {
                 "answer": response_text
@@ -783,7 +825,7 @@ You can also specify the type of fortune and time range you want to predict, for
 4. 相关建议
 
 请用中文回答，语气要友好、积极，但也要保持一定的神秘感。预测要具体但不过于绝对。
-请控制回答长度在800字以内，简洁明了。"""
+请提供完整详细的预测内容，确保回答完整。"""
             system_prompt = "你是一位经验丰富的占星师和命理师，擅长根据姓名、出生年份和星座预测各种运势。你的预测风格既神秘又积极，能够给用户带来希望和指导。"
         else:
             # Format date based on time range
@@ -828,17 +870,17 @@ Please predict the {prediction_type} for {time_range} based on the user's name, 
 4. Related advice
 
 Please answer in English, with a friendly and positive tone, but also maintain a certain sense of mystery. Predictions should be specific but not too absolute.
-Please keep the answer within 800 words, concise and clear."""
+Please provide complete and detailed prediction content, ensuring the answer is complete."""
             system_prompt = "You are an experienced astrologer and fortune teller, skilled at predicting various types of fortune based on name, birth year, and zodiac sign. Your prediction style is both mysterious and positive, able to bring hope and guidance to users."
         
         # Select model based on API provider
-        model_name = settings.openrouter_model if api_key else self.chat_model
+        model_name = "google/gemini-2.5-pro"
         logger.debug(f"Generating fortune prediction (model: {model_name}, language: {language})")
         
         try:
             # Use LangChain for prediction
-            # Limit output to ~1000 tokens (approximately 800 Chinese characters or 600 English words)
-            langchain_llm = self._get_langchain_llm(api_key=api_key, base_url=base_url, max_tokens=1000)
+            # Set max_tokens to 3000 to ensure complete response (approximately 2000+ Chinese characters or 1500+ English words)
+            langchain_llm = self._get_langchain_llm(api_key=api_key, base_url=base_url, max_tokens=3000)
             # Use higher temperature for creative predictions
             langchain_llm.temperature = 0.8
             

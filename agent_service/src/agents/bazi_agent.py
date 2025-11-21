@@ -29,13 +29,13 @@ class BaziAgent:
             api_key=settings.aihubmix_api_key,
             base_url=settings.aihubmix_base_url
         )
-        self.chat_model = settings.chat_model
+        self.chat_model = "google/gemini-2.5-pro"
         
         # Initialize LangChain ChatOpenAI (default)
         self.langchain_llm = ChatOpenAI(
             api_key=settings.aihubmix_api_key,
             base_url=settings.aihubmix_base_url,
-            model=settings.chat_model,
+            model="google/gemini-2.5-pro",
             temperature=0.3
         )
         
@@ -83,11 +83,11 @@ class BaziAgent:
         if api_key:
             # Use custom API if provided
             client_base_url = base_url or settings.openrouter_base_url
-            model_name = settings.openrouter_model
+            model_name = "google/gemini-2.5-pro"
         else:
             # Use default AIHubMix
             client_base_url = settings.aihubmix_base_url
-            model_name = self.chat_model
+            model_name = "google/gemini-2.5-pro"
         
         llm_kwargs = {
             "api_key": api_key or settings.aihubmix_api_key,
@@ -254,19 +254,20 @@ class BaziAgent:
 首先，判断用户的提问是否与八字、四柱八字、命理、生辰八字相关。如果完全不相关（比如问天气、新闻、其他话题），请将 is_bazi_related 设置为 false。
 
 如果与八字命理相关，请仔细提取以下信息（所有时间都是阴历/农历）：
-1. 出生年份（birth_year）：4位数字的年份，如1990、2000等
-2. 出生月份（birth_month）：1-12的月份数字
-3. 出生日期（birth_day）：1-31的日期数字
-4. 出生小时（birth_hour）：0-23的小时数字
-5. 出生分钟（birth_minute）：0-59的分钟数字
-6. 出生地点（birth_location）：城市名称，如"北京"、"上海"、"深圳"等
-7. 现在所在的地点（current_location）：城市名称，如"北京"、"上海"、"深圳"等
+1. 出生年份（birth_year）：4位数字的年份，如1990、2000等（必需）
+2. 出生月份（birth_month）：1-12的月份数字（必需）
+3. 出生日期（birth_day）：1-31的日期数字（必需）
+4. 出生小时（birth_hour）：0-23的小时数字（可选）
+5. 出生分钟（birth_minute）：0-59的分钟数字（可选）
+6. 出生地点（birth_location）：城市名称，如"北京"、"上海"、"深圳"等（必需）
+7. 现在所在的地点（current_location）：城市名称，如"北京"、"上海"、"深圳"等（必需）
 
 注意：
 - 所有时间都是阴历（农历），不是阳历（公历）
 - 如果用户提到"农历"、"阴历"、"旧历"，那就是阴历
 - 如果用户只说了日期没有说明，默认是阴历
 - 出生地点和现在所在的地点可以是同一个城市，也可以是不同的城市
+- 出生小时和分钟是可选的，如果用户没有提供，可以设置为null
 
 请以JSON格式返回：
 {{
@@ -288,19 +289,20 @@ class BaziAgent:
 First, determine if the user's question is related to Bazi (Eight Characters), Four Pillars, Chinese astrology, or birth chart calculation. If it's completely unrelated (e.g., asking about weather, news, other topics), set is_bazi_related to false.
 
 If related to Bazi/Chinese astrology, please carefully extract the following information (all times are in lunar calendar):
-1. Birth year (birth_year): 4-digit year, such as 1990, 2000, etc.
-2. Birth month (birth_month): Month number 1-12
-3. Birth day (birth_day): Day number 1-31
-4. Birth hour (birth_hour): Hour number 0-23
-5. Birth minute (birth_minute): Minute number 0-59
-6. Birth location (birth_location): City name, such as "Beijing", "Shanghai", "Shenzhen", etc.
-7. Current location (current_location): City name, such as "Beijing", "Shanghai", "Shenzhen", etc.
+1. Birth year (birth_year): 4-digit year, such as 1990, 2000, etc. (required)
+2. Birth month (birth_month): Month number 1-12 (required)
+3. Birth day (birth_day): Day number 1-31 (required)
+4. Birth hour (birth_hour): Hour number 0-23 (optional)
+5. Birth minute (birth_minute): Minute number 0-59 (optional)
+6. Birth location (birth_location): City name, such as "Beijing", "Shanghai", "Shenzhen", etc. (required)
+7. Current location (current_location): City name, such as "Beijing", "Shanghai", "Shenzhen", etc. (required)
 
 Note:
 - All times are in lunar calendar, not solar calendar
 - If user mentions "农历", "阴历", "旧历", it's lunar calendar
 - If user only mentions date without specification, default to lunar calendar
 - Birth location and current location can be the same city or different cities
+- Birth hour and minute are optional, if user doesn't provide them, set to null
 
 Please return in JSON format:
 {{
@@ -372,7 +374,7 @@ Return only JSON, no other text."""
             
             # Check completeness
             missing = []
-            required_fields = ["birth_year", "birth_month", "birth_day", "birth_hour", "birth_minute", "birth_location", "current_location"]
+            required_fields = ["birth_year", "birth_month", "birth_day", "birth_location", "current_location"]
             for field in required_fields:
                 if not extracted_info.get(field):
                     missing.append(field)
@@ -402,7 +404,7 @@ Return only JSON, no other text."""
             
             # Check completeness
             missing = []
-            required_fields = ["birth_year", "birth_month", "birth_day", "birth_hour", "birth_minute", "birth_location", "current_location"]
+            required_fields = ["birth_year", "birth_month", "birth_day", "birth_location", "current_location"]
             for field in required_fields:
                 if not extracted_info.get(field):
                     missing.append(field)
@@ -590,16 +592,18 @@ Return only JSON, no other text."""
 - 运势建议
 
 请在提问中提供以下信息（所有时间都是阴历/农历）：
-- 您的出生年份（例如：1990）
-- 您的出生月份（1-12月）
-- 您的出生日期（1-31日）
-- 您的出生小时（0-23时）
-- 您的出生分钟（0-59分）
-- 您的出生地点（例如：北京、上海）
-- 您现在所在的地点（例如：北京、上海）
+- 您的出生年份（例如：1990）（必需）
+- 您的出生月份（1-12月）（必需）
+- 您的出生日期（1-31日）（必需）
+- 您的出生小时（0-23时）（可选，如果不确定可以不提供）
+- 您的出生分钟（0-59分）（可选，如果不确定可以不提供）
+- 您的出生地点（例如：北京、上海）（必需）
+- 您现在所在的地点（例如：北京、上海）（必需）
 
 例如：
-"我1990年农历5月15日14时30分在北京出生，现在在上海，帮我算一下八字" """
+"我1990年农历5月15日14时30分在北京出生，现在在上海，帮我算一下八字"
+或者：
+"我1990年农历5月15日在北京出生，现在在上海，帮我算一下八字" """
             else:
                 reminder = """I am a Bazi (Eight Characters) calculation assistant, specialized in helping users calculate and analyze Bazi Chinese astrology.
 
@@ -612,16 +616,18 @@ I can calculate Bazi based on your birth information (lunar calendar), including
 - Fortune suggestions
 
 Please include the following information in your question (all times are in lunar calendar):
-- Your birth year (e.g., 1990)
-- Your birth month (1-12)
-- Your birth day (1-31)
-- Your birth hour (0-23)
-- Your birth minute (0-59)
-- Your birth location (e.g., Beijing, Shanghai)
-- Your current location (e.g., Beijing, Shanghai)
+- Your birth year (e.g., 1990) (required)
+- Your birth month (1-12) (required)
+- Your birth day (1-31) (required)
+- Your birth hour (0-23) (optional, can omit if uncertain)
+- Your birth minute (0-59) (optional, can omit if uncertain)
+- Your birth location (e.g., Beijing, Shanghai) (required)
+- Your current location (e.g., Beijing, Shanghai) (required)
 
 For example:
-"I was born on May 15, 1990 at 14:30 in Beijing (lunar calendar), now in Shanghai, please calculate my Bazi" """
+"I was born on May 15, 1990 at 14:30 in Beijing (lunar calendar), now in Shanghai, please calculate my Bazi"
+or:
+"I was born on May 15, 1990 in Beijing (lunar calendar), now in Shanghai, please calculate my Bazi" """
             
             return {
                 "answer": reminder
@@ -634,8 +640,6 @@ For example:
                 "birth_year": "出生年份",
                 "birth_month": "出生月份",
                 "birth_day": "出生日期",
-                "birth_hour": "出生小时",
-                "birth_minute": "出生分钟",
                 "birth_location": "出生地点",
                 "current_location": "现在所在的地点"
             }
@@ -648,14 +652,14 @@ For example:
                 reminder += "- 您的出生月份（1-12月）\n"
             if "birth_day" in missing:
                 reminder += "- 您的出生日期（1-31日）\n"
-            if "birth_hour" in missing:
-                reminder += "- 您的出生小时（0-23时）\n"
-            if "birth_minute" in missing:
-                reminder += "- 您的出生分钟（0-59分）\n"
             if "birth_location" in missing:
                 reminder += "- 您的出生地点（例如：北京、上海）\n"
             if "current_location" in missing:
                 reminder += "- 您现在所在的地点（例如：北京、上海）\n"
+            
+            # Add optional fields info if not provided
+            if not extracted_info.get("birth_hour") and not extracted_info.get("birth_minute"):
+                reminder += "\n提示：如果您知道出生时间（小时和分钟），可以提供更精确的八字计算；如果不确定，也可以不提供。\n"
             
             # Format as text response (consistent with other agents)
             response_text = reminder
@@ -683,8 +687,8 @@ For example:
             birth_year=extracted_info["birth_year"],
             birth_month=extracted_info["birth_month"],
             birth_day=extracted_info["birth_day"],
-            birth_hour=extracted_info["birth_hour"],
-            birth_minute=extracted_info["birth_minute"],
+            birth_hour=extracted_info.get("birth_hour"),
+            birth_minute=extracted_info.get("birth_minute"),
             birth_location=extracted_info["birth_location"],
             current_location=extracted_info["current_location"],
             api_key=api_key,
@@ -696,10 +700,10 @@ For example:
         birth_year: int,
         birth_month: int,
         birth_day: int,
-        birth_hour: int,
-        birth_minute: int,
-        birth_location: str,
-        current_location: str,
+        birth_hour: Optional[int] = None,
+        birth_minute: Optional[int] = None,
+        birth_location: Optional[str] = None,
+        current_location: Optional[str] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -710,8 +714,8 @@ For example:
             birth_year: Birth year (lunar calendar)
             birth_month: Birth month (lunar calendar, 1-12)
             birth_day: Birth day (lunar calendar, 1-31)
-            birth_hour: Birth hour (0-23)
-            birth_minute: Birth minute (0-59)
+            birth_hour: Birth hour (0-23, optional)
+            birth_minute: Birth minute (0-59, optional)
             birth_location: Birth location (city name)
             current_location: Current location (city name)
             api_key: Optional API key (if provided, uses OpenRouter)
@@ -720,7 +724,26 @@ For example:
         Returns:
             Dictionary containing bazi calculation result and related information
         """
-        logger.info(f"Calculating bazi for birth: {birth_year}年{birth_month}月{birth_day}日 {birth_hour}时{birth_minute}分, 出生地: {birth_location}, 现居: {current_location}")
+        # Build time string for logging
+        time_str = ""
+        if birth_hour is not None:
+            if birth_minute is not None:
+                time_str = f"{birth_hour}时{birth_minute}分"
+            else:
+                time_str = f"{birth_hour}时"
+        else:
+            time_str = "时间未提供"
+        
+        logger.info(f"Calculating bazi for birth: {birth_year}年{birth_month}月{birth_day}日 {time_str}, 出生地: {birth_location}, 现居: {current_location}")
+        
+        # Build time string for prompt
+        time_prompt = ""
+        if birth_hour is not None and birth_minute is not None:
+            time_prompt = f"- 出生时间：{birth_hour}时{birth_minute}分\n"
+        elif birth_hour is not None:
+            time_prompt = f"- 出生时间：{birth_hour}时（分钟未提供）\n"
+        else:
+            time_prompt = "- 出生时间：未提供（将使用默认时间或进行估算）\n"
         
         # Build prompt for bazi calculation
         prompt = f"""请为以下用户计算八字（四柱八字）：
@@ -729,8 +752,7 @@ For example:
 - 出生年份：{birth_year}年
 - 出生月份：{birth_month}月
 - 出生日期：{birth_day}日
-- 出生时间：{birth_hour}时{birth_minute}分
-- 出生地点：{birth_location}
+{time_prompt}- 出生地点：{birth_location}
 - 现在所在的地点：{current_location}
 
 请根据以上信息计算并分析：
@@ -741,11 +763,15 @@ For example:
 5. 性格特征
 6. 运势建议
 
-请用中文回答，语气要专业、准确，体现传统命理学的深度。注意要考虑到出生地点和现在所在的地点对时区的影响。
-请控制回答长度在800字以内，重点突出，简洁明了。"""
+注意：
+- 如果出生时间（小时和分钟）未提供，请使用默认时间（通常为中午12时）或根据日期进行合理估算
+- 如果只提供了小时未提供分钟，请使用该小时的中间值（如14时使用14时30分）
+- 请用中文回答，语气要专业、准确，体现传统命理学的深度
+- 注意要考虑到出生地点和现在所在的地点对时区的影响
+- 请控制回答长度在800字以内，重点突出，简洁明了"""
         
         # Select model based on API provider
-        model_name = settings.openrouter_model if api_key else self.chat_model
+        model_name = "google/gemini-2.5-pro"
         logger.debug(f"Generating bazi calculation (model: {model_name})")
         
         try:
