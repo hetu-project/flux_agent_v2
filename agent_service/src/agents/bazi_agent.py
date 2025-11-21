@@ -636,47 +636,96 @@ or:
         # If information is incomplete, return reminder
         if not extracted_info.get("is_complete"):
             missing = extracted_info.get("missing_info", [])
-            missing_chinese = {
-                "birth_year": "出生年份",
-                "birth_month": "出生月份",
-                "birth_day": "出生日期",
-                "birth_location": "出生地点",
-                "current_location": "现在所在的地点"
-            }
-            missing_list = [missing_chinese.get(m, m) for m in missing]
             
-            reminder = f"为了给您计算八字，我还需要以下信息（所有时间都是阴历/农历）：{', '.join(missing_list)}。\n\n请告诉我：\n"
-            if "birth_year" in missing:
-                reminder += "- 您的出生年份（例如：1990）\n"
-            if "birth_month" in missing:
-                reminder += "- 您的出生月份（1-12月）\n"
-            if "birth_day" in missing:
-                reminder += "- 您的出生日期（1-31日）\n"
-            if "birth_location" in missing:
-                reminder += "- 您的出生地点（例如：北京、上海）\n"
-            if "current_location" in missing:
-                reminder += "- 您现在所在的地点（例如：北京、上海）\n"
-            
-            # Add optional fields info if not provided
-            if not extracted_info.get("birth_hour") and not extracted_info.get("birth_minute"):
-                reminder += "\n提示：如果您知道出生时间（小时和分钟），可以提供更精确的八字计算；如果不确定，也可以不提供。\n"
-            
-            # Format as text response (consistent with other agents)
-            response_text = reminder
-            if extracted_info.get("birth_year"):
-                response_text = f"已获取信息：出生年份 {extracted_info.get('birth_year')}年\n\n" + response_text
-            if extracted_info.get("birth_month"):
-                response_text = f"已获取信息：出生月份 {extracted_info.get('birth_month')}月\n\n" + response_text
-            if extracted_info.get("birth_day"):
-                response_text = f"已获取信息：出生日期 {extracted_info.get('birth_day')}日\n\n" + response_text
-            if extracted_info.get("birth_hour") is not None:
-                response_text = f"已获取信息：出生小时 {extracted_info.get('birth_hour')}时\n\n" + response_text
-            if extracted_info.get("birth_minute") is not None:
-                response_text = f"已获取信息：出生分钟 {extracted_info.get('birth_minute')}分\n\n" + response_text
-            if extracted_info.get("birth_location"):
-                response_text = f"已获取信息：出生地点 {extracted_info.get('birth_location')}\n\n" + response_text
-            if extracted_info.get("current_location"):
-                response_text = f"已获取信息：现在所在的地点 {extracted_info.get('current_location')}\n\n" + response_text
+            if language == "zh":
+                missing_chinese = {
+                    "birth_year": "出生年份",
+                    "birth_month": "出生月份",
+                    "birth_day": "出生日期",
+                    "birth_location": "出生地点",
+                    "current_location": "现在所在的地点"
+                }
+                missing_list = [missing_chinese.get(m, m) for m in missing]
+                
+                reminder = f"为了给您计算八字，我还需要以下信息（所有时间都是阴历/农历）：{', '.join(missing_list)}。\n\n请告诉我：\n"
+                if "birth_year" in missing:
+                    reminder += "- 您的出生年份（例如：1990）\n"
+                if "birth_month" in missing:
+                    reminder += "- 您的出生月份（1-12月）\n"
+                if "birth_day" in missing:
+                    reminder += "- 您的出生日期（1-31日）\n"
+                if "birth_location" in missing:
+                    reminder += "- 您的出生地点（例如：北京、上海）\n"
+                if "current_location" in missing:
+                    reminder += "- 您现在所在的地点（例如：北京、上海）\n"
+                
+                # Add optional fields info if not provided
+                if not extracted_info.get("birth_hour") and not extracted_info.get("birth_minute"):
+                    reminder += "\n提示：如果您知道出生时间（小时和分钟），可以提供更精确的八字计算；如果不确定，也可以不提供。\n"
+                
+                # Format as text response (consistent with other agents)
+                response_text = reminder
+                if extracted_info.get("birth_year"):
+                    response_text = f"已获取信息：出生年份 {extracted_info.get('birth_year')}年\n\n" + response_text
+                if extracted_info.get("birth_month"):
+                    response_text = f"已获取信息：出生月份 {extracted_info.get('birth_month')}月\n\n" + response_text
+                if extracted_info.get("birth_day"):
+                    response_text = f"已获取信息：出生日期 {extracted_info.get('birth_day')}日\n\n" + response_text
+                if extracted_info.get("birth_hour") is not None:
+                    response_text = f"已获取信息：出生小时 {extracted_info.get('birth_hour')}时\n\n" + response_text
+                if extracted_info.get("birth_minute") is not None:
+                    response_text = f"已获取信息：出生分钟 {extracted_info.get('birth_minute')}分\n\n" + response_text
+                if extracted_info.get("birth_location"):
+                    response_text = f"已获取信息：出生地点 {extracted_info.get('birth_location')}\n\n" + response_text
+                if extracted_info.get("current_location"):
+                    response_text = f"已获取信息：现在所在的地点 {extracted_info.get('current_location')}\n\n" + response_text
+            else:
+                # English version
+                missing_english = {
+                    "birth_year": "birth year",
+                    "birth_month": "birth month",
+                    "birth_day": "birth day",
+                    "birth_location": "birth location",
+                    "current_location": "current location"
+                }
+                missing_list = [missing_english.get(m, m) for m in missing]
+                
+                if len(missing) == 1:
+                    reminder = f"To calculate your Bazi, I still need your {missing_list[0]} (all dates should be in lunar calendar).\n\nPlease tell me:\n"
+                else:
+                    reminder = f"To calculate your Bazi, I still need the following information (all dates should be in lunar calendar): {', '.join(missing_list[:-1])} and {missing_list[-1]}.\n\nPlease tell me:\n"
+                
+                if "birth_year" in missing:
+                    reminder += "- Your birth year (e.g., 1990)\n"
+                if "birth_month" in missing:
+                    reminder += "- Your birth month (1-12, lunar calendar)\n"
+                if "birth_day" in missing:
+                    reminder += "- Your birth day (1-31, lunar calendar)\n"
+                if "birth_location" in missing:
+                    reminder += "- Your birth location (e.g., Beijing, Shanghai)\n"
+                if "current_location" in missing:
+                    reminder += "- Your current location (e.g., Beijing, Shanghai)\n"
+                
+                # Add optional fields info if not provided
+                if not extracted_info.get("birth_hour") and not extracted_info.get("birth_minute"):
+                    reminder += "\n💡 Tip: If you know your birth time (hour and minute), you can provide it for a more accurate calculation. If you're not sure, that's okay too.\n"
+                
+                # Format as text response (consistent with other agents)
+                response_text = reminder
+                if extracted_info.get("birth_year"):
+                    response_text = f"Information received: Birth year {extracted_info.get('birth_year')}\n\n" + response_text
+                if extracted_info.get("birth_month"):
+                    response_text = f"Information received: Birth month {extracted_info.get('birth_month')}\n\n" + response_text
+                if extracted_info.get("birth_day"):
+                    response_text = f"Information received: Birth day {extracted_info.get('birth_day')}\n\n" + response_text
+                if extracted_info.get("birth_hour") is not None:
+                    response_text = f"Information received: Birth hour {extracted_info.get('birth_hour')}\n\n" + response_text
+                if extracted_info.get("birth_minute") is not None:
+                    response_text = f"Information received: Birth minute {extracted_info.get('birth_minute')}\n\n" + response_text
+                if extracted_info.get("birth_location"):
+                    response_text = f"Information received: Birth location {extracted_info.get('birth_location')}\n\n" + response_text
+                if extracted_info.get("current_location"):
+                    response_text = f"Information received: Current location {extracted_info.get('current_location')}\n\n" + response_text
             
             return {
                 "answer": response_text
@@ -691,6 +740,7 @@ or:
             birth_minute=extracted_info.get("birth_minute"),
             birth_location=extracted_info["birth_location"],
             current_location=extracted_info["current_location"],
+            language=language,
             api_key=api_key,
             base_url=base_url
         )
@@ -704,6 +754,7 @@ or:
         birth_minute: Optional[int] = None,
         birth_location: Optional[str] = None,
         current_location: Optional[str] = None,
+        language: str = "zh",
         api_key: Optional[str] = None,
         base_url: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -736,17 +787,18 @@ or:
         
         logger.info(f"Calculating bazi for birth: {birth_year}年{birth_month}月{birth_day}日 {time_str}, 出生地: {birth_location}, 现居: {current_location}")
         
-        # Build time string for prompt
-        time_prompt = ""
-        if birth_hour is not None and birth_minute is not None:
-            time_prompt = f"- 出生时间：{birth_hour}时{birth_minute}分\n"
-        elif birth_hour is not None:
-            time_prompt = f"- 出生时间：{birth_hour}时（分钟未提供）\n"
-        else:
-            time_prompt = "- 出生时间：未提供（将使用默认时间或进行估算）\n"
-        
-        # Build prompt for bazi calculation
-        prompt = f"""请为以下用户计算八字（四柱八字）：
+        # Build prompt for bazi calculation based on language
+        if language == "zh":
+            # Build time string for prompt
+            time_prompt = ""
+            if birth_hour is not None and birth_minute is not None:
+                time_prompt = f"- 出生时间：{birth_hour}时{birth_minute}分\n"
+            elif birth_hour is not None:
+                time_prompt = f"- 出生时间：{birth_hour}时（分钟未提供）\n"
+            else:
+                time_prompt = "- 出生时间：未提供（将使用默认时间或进行估算）\n"
+            
+            prompt = f"""请为以下用户计算八字（四柱八字）：
 
 出生信息（阴历/农历）：
 - 出生年份：{birth_year}年
@@ -763,12 +815,55 @@ or:
 5. 性格特征
 6. 运势建议
 
-注意：
+重要提示：
+- 用户提供的日期是阴历/农历日期，请直接使用，不要转换为公历
 - 如果出生时间（小时和分钟）未提供，请使用默认时间（通常为中午12时）或根据日期进行合理估算
 - 如果只提供了小时未提供分钟，请使用该小时的中间值（如14时使用14时30分）
 - 请用中文回答，语气要专业、准确，体现传统命理学的深度
 - 注意要考虑到出生地点和现在所在的地点对时区的影响
-- 请控制回答长度在800字以内，重点突出，简洁明了"""
+- **请务必提供完整详细的回答，确保所有6个部分（四柱八字、天干地支说明、五行分析、命理特点、性格特征、运势建议）都完整呈现，不要中途截断**
+- 回答要结构清晰，内容完整，确保用户能看到完整的八字分析
+- **重要：请确保回答完整，不要在任何地方截断，包括表格、列表等所有内容都必须完整呈现**"""
+            
+            system_prompt = "你是一位经验丰富的命理师，精通八字（四柱八字）计算和分析。你能够根据阴历出生日期、时间和地点，准确计算四柱八字，并进行深入的命理分析。你的分析风格专业、准确，能够给用户提供有价值的命理指导。"
+        else:
+            # English version
+            time_prompt = ""
+            if birth_hour is not None and birth_minute is not None:
+                time_prompt = f"- Birth time: {birth_hour}:{birth_minute:02d}\n"
+            elif birth_hour is not None:
+                time_prompt = f"- Birth time: {birth_hour}:00 (minute not provided)\n"
+            else:
+                time_prompt = "- Birth time: Not provided (will use default time or estimate)\n"
+            
+            prompt = f"""Please calculate the Bazi (Eight Characters) for the following user:
+
+Birth Information (Lunar Calendar):
+- Birth year: {birth_year}
+- Birth month: {birth_month}
+- Birth day: {birth_day}
+{time_prompt}- Birth location: {birth_location}
+- Current location: {current_location}
+
+Please calculate and analyze based on the above information:
+1. Four Pillars (Year, Month, Day, Hour pillars)
+2. Detailed explanation of Heavenly Stems and Earthly Branches
+3. Five Elements analysis (Metal, Wood, Water, Fire, Earth)
+4. Destiny characteristics analysis
+5. Personality traits
+6. Fortune suggestions
+
+Important Notes:
+- The date provided by the user is in lunar calendar, please use it directly, do not convert to solar calendar
+- If birth time (hour and minute) is not provided, use default time (usually noon 12:00) or make a reasonable estimate based on the date
+- If only hour is provided without minute, use the middle value of that hour (e.g., 14:30 for 14:00)
+- Please answer in English, with a professional and accurate tone, reflecting the depth of traditional Chinese astrology
+- Consider the time zone effects of birth location and current location
+- **Please provide a complete and detailed answer, ensuring all 6 parts (Four Pillars, Heavenly Stems and Earthly Branches explanation, Five Elements analysis, Destiny characteristics, Personality traits, Fortune suggestions) are fully presented without truncation**
+- The answer should be well-structured and complete, ensuring the user can see the full Bazi analysis
+- **Important: Please ensure the answer is complete, do not truncate anywhere, including tables, lists, and all content must be fully presented**"""
+            
+            system_prompt = "You are an experienced Chinese astrology master, skilled in Bazi (Eight Characters) calculation and analysis. You can accurately calculate the Four Pillars based on lunar birth date, time, and location, and provide in-depth astrological analysis. Your analysis style is professional and accurate, able to provide valuable astrological guidance to users."
         
         # Select model based on API provider
         model_name = "google/gemini-2.5-pro"
@@ -776,14 +871,17 @@ or:
         
         try:
             # Use LangChain for calculation
-            # Limit output to ~1000 tokens (approximately 800 Chinese characters)
-            langchain_llm = self._get_langchain_llm(api_key=api_key, base_url=base_url, max_tokens=1000)
+            # Set max_tokens to 12000 to ensure complete response
+            # Note: Gemini 2.5 Pro uses reasoning tokens (internal thinking process),
+            # which don't appear in the output but count towards the token limit.
+            # We need to allocate enough tokens for both reasoning and actual output.
+            langchain_llm = self._get_langchain_llm(api_key=api_key, base_url=base_url, max_tokens=12000)
             # Use moderate temperature for accurate calculations
             langchain_llm.temperature = 0.5
             
             # Build prompt template
             calculate_prompt_template = ChatPromptTemplate.from_messages([
-                ("system", "你是一位经验丰富的命理师，精通八字（四柱八字）计算和分析。你能够根据阴历出生日期、时间和地点，准确计算四柱八字，并进行深入的命理分析。你的分析风格专业、准确，能够给用户提供有价值的命理指导。"),
+                ("system", system_prompt),
                 ("human", "{prompt}")
             ])
             
@@ -792,7 +890,35 @@ or:
             response = await langchain_llm.ainvoke(messages)
             
             calculation_text = response.content
-            logger.info(f"Generated bazi calculation (length: {len(calculation_text)})")
+            
+            # Log response details for debugging
+            logger.info(f"LLM response received: length={len(calculation_text) if calculation_text else 0} characters")
+            
+            # Check response object for truncation indicators
+            if hasattr(response, 'response_metadata'):
+                metadata = response.response_metadata
+                logger.info(f"Response metadata: {metadata}")
+                if metadata and 'finish_reason' in metadata:
+                    finish_reason = metadata.get('finish_reason')
+                    if finish_reason and finish_reason != 'stop':
+                        logger.warning(f"Response may be incomplete. Finish reason: {finish_reason}")
+            
+            # Check if response was truncated
+            if calculation_text:
+                # Check for incomplete responses (ending abruptly)
+                incomplete_indicators = [
+                    calculation_text.endswith('|'),  # Table might be cut off
+                    calculation_text.endswith('**'),  # Markdown formatting cut off
+                    calculation_text.endswith('###'),  # Heading cut off
+                    len(calculation_text) > 500 and not any(calculation_text.endswith(marker) for marker in ['。', '.', '！', '!', '?', '？', '\n\n', '\n']),  # Long text without proper ending
+                ]
+                
+                if any(incomplete_indicators):
+                    logger.warning(f"Response appears to be truncated. Length: {len(calculation_text)}, ends with: {repr(calculation_text[-50:])}")
+                else:
+                    logger.info(f"Generated bazi calculation (length: {len(calculation_text)} characters)")
+            else:
+                logger.warning("Empty response received from LLM")
             
             return {
                 "answer": calculation_text

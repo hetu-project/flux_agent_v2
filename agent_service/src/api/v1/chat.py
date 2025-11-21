@@ -631,12 +631,20 @@ async def chat_bazi(
             base_url=base_url
         )
         
-        logger.info("Bazi calculation generated successfully")
+        answer_content = result.get("answer", "")
+        answer_length = len(answer_content) if answer_content else 0
+        logger.info(f"Bazi calculation generated successfully. Answer length: {answer_length} characters")
+        
+        # Log a preview of the answer (first and last 100 chars) for debugging
+        if answer_content:
+            preview_start = answer_content[:100] if len(answer_content) > 100 else answer_content
+            preview_end = answer_content[-100:] if len(answer_content) > 100 else ""
+            logger.debug(f"Answer preview - Start: {preview_start}... End: ...{preview_end}")
         
         # Format response in OpenAI-compatible format (consistent with other agents)
         message = ChatMessage(
             role="assistant",  # Hardcoded as assistant
-            content=result["answer"]
+            content=answer_content
         )
         
         choice = Choice(message=message)
