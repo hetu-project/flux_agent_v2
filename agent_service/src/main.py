@@ -33,7 +33,7 @@ from src.agents.company_agent import CompanyAgent
 from src.agents.tarot_agent import TarotAgent
 
 # Import API routes
-from src.api.v1 import projects, tweets, chat, collections, project_content
+from src.api.v1 import projects, tweets, chat, collections, project_content, chat_history
 from src.api.v2 import chat as chat_v2
 from src.api.dependencies import set_dependencies
 
@@ -180,6 +180,7 @@ logger.info("Registering API routes...")
 app.include_router(projects.router)
 app.include_router(tweets.router)
 app.include_router(chat.router)
+app.include_router(chat_history.router)
 app.include_router(collections.router)
 app.include_router(project_content.router)
 # Register V2 routes

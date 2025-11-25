@@ -6,20 +6,28 @@ import re
 import json
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
-from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.config import get_settings
 from src.utils.logger import get_logger
+from src.agents.base_agent_with_context import BaseAgentWithContext
 
 settings = get_settings()
 logger = get_logger(__name__)
 
 
-class BaziAgent:
+class BaziAgent(BaseAgentWithContext):
     """Bazi (Eight Characters) Agent for calculating Chinese birth chart based on lunar calendar birth date, time, and location."""
     
-    def __init__(self):
+    AGENT_NAME = "bazi"
+    DEFAULT_MEMORY_WINDOW = 10
+    
+    def __init__(self, db_session: Optional[AsyncSession] = None):
+        # Initialize base class with context support
+        super().__init__(db_session=db_session)
+        
         # Initialize default LLM client with AIHubMix
         if not settings.aihubmix_api_key:
             raise ValueError("AIHUBMIX_API_KEY is required. Please set it in .env file or environment variables.")
@@ -38,12 +46,6 @@ class BaziAgent:
             model="gemini-2.0-flash",
             temperature=0.3
         )
-        
-        # Initialize LangChain Memory storage for different sessions
-        # Each session_id will have its own memory instance
-        # Keep last 10 messages for context (can be adjusted)
-        self._memories: Dict[str, ConversationBufferWindowMemory] = {}
-        self._default_memory_window = 10
     
     def _get_llm_client(self, api_key: Optional[str] = None, base_url: Optional[str] = None) -> OpenAI:
         """
@@ -102,96 +104,6 @@ class BaziAgent:
         
         return ChatOpenAI(**llm_kwargs)
     
-    def _get_or_create_memory(self, session_id: Optional[str] = None) -> Optional[ConversationBufferWindowMemory]:
-        """
-        Get or create a memory instance for a specific session.
-        If no session_id is provided, returns None (no memory storage).
-        
-        Args:
-            session_id: Optional session identifier. If None, returns None
-            
-        Returns:
-            ConversationBufferWindowMemory instance for the session, or None if no session_id
-        """
-        # If no session_id provided, don't use memory
-        if not session_id:
-            return None
-        
-        # Create memory if it doesn't exist for this session
-        if session_id not in self._memories:
-            self._memories[session_id] = ConversationBufferWindowMemory(
-                k=self._default_memory_window,
-                return_messages=True,
-                memory_key="chat_history"
-            )
-            logger.debug(f"Created new memory for session: {session_id}")
-        
-        return self._memories[session_id]
-    
-    def _load_conversation_history_to_memory(
-        self, 
-        conversation_history: Optional[List[Dict[str, str]]],
-        session_id: Optional[str] = None
-    ):
-        """
-        Load conversation history into LangChain memory for a specific session.
-        Only loads if session_id is provided.
-        
-        Args:
-            conversation_history: List of messages with role and content
-            session_id: Optional session identifier. If None, no memory is stored.
-        """
-        # If no session_id, don't store memory
-        if not session_id:
-            return
-        
-        if not conversation_history:
-            return
-        
-        # Get memory for this session
-        memory = self._get_or_create_memory(session_id)
-        if not memory:
-            return
-        
-        # Clear existing memory to avoid duplicates when loading from external history
-        # This ensures we use the provided history as the source of truth
-        memory.clear()
-        
-        # Load history into memory
-        for msg in conversation_history:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            
-            if role == "user":
-                memory.chat_memory.add_user_message(content)
-            elif role == "assistant":
-                memory.chat_memory.add_ai_message(content)
-            elif role == "system":
-                # System messages are handled separately in prompts
-                pass
-        
-        logger.debug(f"Loaded {len(conversation_history)} messages into memory for session: {session_id}")
-    
-    def clear_session_memory(self, session_id: str):
-        """
-        Clear memory for a specific session.
-        
-        Args:
-            session_id: Session identifier to clear
-        """
-        if session_id in self._memories:
-            self._memories[session_id].clear()
-            logger.debug(f"Cleared memory for session: {session_id}")
-    
-    def get_session_count(self) -> int:
-        """
-        Get the number of active sessions.
-        
-        Returns:
-            Number of active sessions
-        """
-        return len(self._memories)
-    
     def _detect_language(self, text: str) -> str:
         """
         Detect if the text is primarily Chinese or English.
@@ -219,6 +131,7 @@ class BaziAgent:
         user_query: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         session_id: Optional[str] = None,
+        user_id: Optional[int] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -229,20 +142,38 @@ class BaziAgent:
         Args:
             user_query: User's natural language input
             conversation_history: Optional conversation history (list of messages with role and content)
-            session_id: Optional session identifier
+            session_id: Optional session identifier for maintaining conversation context
+            user_id: Optional user ID for database persistence
             api_key: Optional API key (if provided, uses OpenRouter)
             base_url: Optional base URL (if provided, uses this URL)
             
         Returns:
             Dictionary containing extracted information and completeness status
         """
-        logger.info(f"Extracting information from query: {user_query[:100]}... (session: {session_id or 'no-session'})")
+        logger.info(f"Extracting information from query: {user_query[:100]}... (session: {session_id or 'no-session'}, user_id: {user_id})")
+        
+        # Load conversation history from database if available
+        db_history = None
+        if session_id and self.db_session:
+            db_history = await self._load_conversation_from_db(session_id, user_id)
+        
+        # Use database history if available, otherwise use provided history
+        effective_history = db_history if db_history else conversation_history
         
         # Load conversation history into LangChain memory for this session (only if session_id is provided)
-        self._load_conversation_history_to_memory(conversation_history, session_id=session_id)
+        self._load_conversation_history_to_memory(effective_history, session_id=session_id)
         
         # Get memory for this session (only if session_id is provided)
         memory = self._get_or_create_memory(session_id)
+        
+        # Save user message to database
+        if session_id:
+            await self._save_message_to_db(
+                session_id=session_id,
+                user_id=user_id,
+                role="user",
+                content=user_query
+            )
         
         # Detect language first
         language = self._detect_language(user_query)
@@ -547,6 +478,7 @@ Return only JSON, no other text."""
         user_query: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         session_id: Optional[str] = None,
+        user_id: Optional[int] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -568,6 +500,7 @@ Return only JSON, no other text."""
             user_query=user_query,
             conversation_history=conversation_history,
             session_id=session_id,
+            user_id=user_id,
             api_key=api_key,
             base_url=base_url
         )
@@ -583,8 +516,19 @@ Return only JSON, no other text."""
             else:
                 reminder = """I am a Bazi (Eight Characters) calculation assistant. I can calculate and analyze Bazi based on your birth information (lunar calendar: year, month, day, birth location, current location). Birth time (hour and minute) is optional; providing it will result in more precise calculations."""
             
+            answer = reminder
+            # Save assistant response to database
+            if session_id:
+                await self._save_message_to_db(
+                    session_id=session_id,
+                    user_id=user_id,
+                    role="assistant",
+                    content=answer,
+                    extra_metadata={"language": language, "is_bazi_related": False}
+                )
+            
             return {
-                "answer": reminder
+                "answer": answer
             }
         
         # If information is incomplete, return reminder
@@ -632,12 +576,23 @@ Return only JSON, no other text."""
             if extracted_info.get("current_location"):
                 response_text = f"已获取信息：现在所在的地点 {extracted_info.get('current_location')}\n\n" + response_text
             
+            answer = response_text
+            # Save assistant response to database
+            if session_id:
+                await self._save_message_to_db(
+                    session_id=session_id,
+                    user_id=user_id,
+                    role="assistant",
+                    content=answer,
+                    extra_metadata={"language": language, "is_complete": False}
+                )
+            
             return {
-                "answer": response_text
+                "answer": answer
             }
         
         # If complete, proceed with bazi calculation
-        return await self.calculate(
+        result = await self.calculate(
             birth_year=extracted_info["birth_year"],
             birth_month=extracted_info["birth_month"],
             birth_day=extracted_info["birth_day"],
@@ -648,6 +603,28 @@ Return only JSON, no other text."""
             api_key=api_key,
             base_url=base_url
         )
+        
+        # Save assistant response to database
+        if session_id and result.get("answer"):
+            await self._save_message_to_db(
+                session_id=session_id,
+                user_id=user_id,
+                role="assistant",
+                content=result["answer"],
+                extra_metadata={
+                    "language": language,
+                    "is_complete": True,
+                    "birth_year": extracted_info.get("birth_year"),
+                    "birth_month": extracted_info.get("birth_month"),
+                    "birth_day": extracted_info.get("birth_day"),
+                    "birth_hour": extracted_info.get("birth_hour"),
+                    "birth_minute": extracted_info.get("birth_minute"),
+                    "birth_location": extracted_info.get("birth_location"),
+                    "current_location": extracted_info.get("current_location")
+                }
+            )
+        
+        return result
     
     async def calculate(
         self,

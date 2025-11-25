@@ -12,10 +12,18 @@ from src.agents.bazi_agent import BaziAgent
 from src.agents.crypto_agent import CryptoAgent
 from src.agents.company_agent import CompanyAgent
 from src.agents.tarot_agent import TarotAgent
-from src.schemas.chat_schema import ChatRequest, ChatResponse, ChatMessage, Choice
+from src.schemas.chat_schema import (
+    ChatRequest, ChatResponse, ChatMessage, Choice,
+    GetChatHistoryRequest, GetChatHistoryResponse,
+    ChatHistoryConversation, ChatHistoryMessage
+)
 from src.api.dependencies import get_rag_agent, get_linkol_agent, get_hetu_agent, get_mcp_agent, get_hetu_mcp_agent, get_fortune_agent, get_health_agent, get_bazi_agent, get_crypto_agent, get_company_agent, get_tarot_agent
 from src.services.database import get_async_session
 from src.repositories.user_repository import UserRepository
+from src.repositories.conversation_repository import ConversationRepository
+from src.repositories.message_repository import MessageRepository
+from src.sql_models.agent import Agent
+from sqlalchemy import select
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -581,7 +589,8 @@ async def chat_bazi(
         "messages": [
             {"role": "user", "content": "我1990年农历5月15日14时30分在北京出生，现在在上海，帮我算一下八字"}
         ],
-        "session_id": "optional-session-id"  // Optional, for maintaining conversation context
+        "session_id": "optional-session-id",  // Optional, for maintaining conversation context
+        "user_id": "optional-user-id"  // Optional, for user-specific context (client_id)
     }
     
     Optional header: Authorization: Bearer <api-key> - If provided, uses OpenRouter API instead of AIHubMix
@@ -595,69 +604,97 @@ async def chat_bazi(
                     "content": "八字计算结果..."
                 }
             }
-        ]
+        ],
+        "session_id": "session-id"  // Returned for subsequent requests
     }
     """
-    try:
-        # Extract API key from Authorization Bearer header (if provided, uses custom API)
-        auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
-        api_key = extract_api_key_from_auth_header(auth_header)
-        
-        # Set base_url if API key is provided
-        base_url = None
-        if api_key:
-            base_url = "https://aiclub.v1.hetu.org/v1"
-        
-        # Extract user query from messages (get last message content)
-        user_query = request.get_user_query()
-        
-        # Get session_id from request body (only use memory if session_id is explicitly provided)
-        session_id = request.session_id
-        
-        # Convert messages to conversation history format
-        conversation_history = [
-            {"role": msg.role, "content": msg.content}
-            for msg in request.messages
-        ]
-        
-        logger.info(
-            f"Bazi calculation request received: query='{user_query[:100]}...', "
-            f"session_id={session_id or 'none (no memory)'}, model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
-        )
-        
-        result = await bazi_agent.query(
-            user_query=user_query,
-            conversation_history=conversation_history,
-            session_id=session_id,
-            api_key=api_key,
-            base_url=base_url
-        )
-        
-        answer_content = result.get("answer", "")
-        answer_length = len(answer_content) if answer_content else 0
-        logger.info(f"Bazi calculation generated successfully. Answer length: {answer_length} characters")
-        
-        # Log a preview of the answer (first and last 100 chars) for debugging
-        if answer_content:
-            preview_start = answer_content[:100] if len(answer_content) > 100 else answer_content
-            preview_end = answer_content[-100:] if len(answer_content) > 100 else ""
-            logger.debug(f"Answer preview - Start: {preview_start}... End: ...{preview_end}")
-        
-        # Format response in OpenAI-compatible format (consistent with other agents)
-        message = ChatMessage(
-            role="assistant",  # Hardcoded as assistant
-            content=answer_content
-        )
-        
-        choice = Choice(message=message)
-        
-        return ChatResponse(
-            choices=[choice]
-        )
-        
-    except Exception as e:
-        logger.error(f"Error processing bazi calculation request: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    # Get database session for context persistence
+    async with get_async_session() as db_session:
+        try:
+            # Extract API key from Authorization Bearer header (if provided, uses custom API)
+            auth_header = http_request.headers.get("authorization") or http_request.headers.get("Authorization")
+            api_key = extract_api_key_from_auth_header(auth_header)
+            
+            # Set base_url if API key is provided
+            base_url = None
+            if api_key:
+                base_url = "https://aiclub.v1.hetu.org/v1"
+            
+            # Extract user query from messages (get last message content)
+            user_query = request.get_user_query()
+            
+            # Get session_id from request body (only use memory if session_id is explicitly provided)
+            session_id = request.session_id
+            
+            # Generate or get session_id if not provided
+            effective_session_id = session_id
+            if not effective_session_id:
+                # Generate a new session_id if not provided
+                import uuid
+                effective_session_id = str(uuid.uuid4())
+                logger.info(f"Generated new session_id: {effective_session_id}")
+            
+            # Get or create user if user_id (client_id) is provided
+            user_id_int = None
+            if request.user_id:
+                try:
+                    user_repo = UserRepository(db_session)
+                    user = await user_repo.get_or_create_by_client_id(request.user_id)
+                    user_id_int = user.id
+                    logger.debug(f"Resolved user_id: {request.user_id} -> {user_id_int}")
+                except Exception as e:
+                    logger.warning(f"Failed to resolve user_id '{request.user_id}': {e}")
+            
+            # Convert messages to conversation history format
+            conversation_history = [
+                {"role": msg.role, "content": msg.content}
+                for msg in request.messages
+            ]
+            
+            logger.info(
+                f"Bazi calculation request received: query='{user_query[:100]}...', "
+                f"session_id={effective_session_id or 'none (no memory)'}, user_id={user_id_int}, "
+                f"model={request.model}, using_api={'Custom API' if api_key else 'AIHubMix'}"
+            )
+            
+            # Set database session on agent for this request
+            bazi_agent.db_session = db_session
+            
+            result = await bazi_agent.query(
+                user_query=user_query,
+                conversation_history=conversation_history,
+                session_id=effective_session_id,
+                user_id=user_id_int,
+                api_key=api_key,
+                base_url=base_url
+            )
+            
+            answer_content = result.get("answer", "")
+            answer_length = len(answer_content) if answer_content else 0
+            logger.info(f"Bazi calculation generated successfully. Answer length: {answer_length} characters")
+            
+            # Log a preview of the answer (first and last 100 chars) for debugging
+            if answer_content:
+                preview_start = answer_content[:100] if len(answer_content) > 100 else answer_content
+                preview_end = answer_content[-100:] if len(answer_content) > 100 else ""
+                logger.debug(f"Answer preview - Start: {preview_start}... End: ...{preview_end}")
+            
+            # Format response in OpenAI-compatible format (consistent with other agents)
+            message = ChatMessage(
+                role="assistant",  # Hardcoded as assistant
+                content=answer_content
+            )
+            
+            choice = Choice(message=message)
+            
+            return ChatResponse(
+                choices=[choice],
+                session_id=effective_session_id  # Return session_id in response
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing bazi calculation request: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/crypto", response_model=ChatResponse)
