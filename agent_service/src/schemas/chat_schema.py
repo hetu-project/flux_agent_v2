@@ -51,4 +51,5 @@ class Choice(BaseModel):
 class ChatResponse(BaseModel):
     """Response schema for chat (OpenAI-compatible format)."""
     choices: List[Choice] = Field(..., description="List of choices")
+    session_id: Optional[str] = Field(None, description="Session ID for maintaining conversation context (returned for subsequent requests)")
 

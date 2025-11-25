@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry and upgrade packaging to fix compatibility issues
-RUN pip install poetry && pip install --upgrade packaging
+# Install Poetry (align with local dev)
+RUN pip install "poetry==2.1.3"
 
 # Copy poetry files (poetry.lock is optional)
 COPY pyproject.toml ./

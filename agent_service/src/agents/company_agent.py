@@ -1,12 +1,21 @@
 """Company Agent for companionship and daily conversation."""
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.sql_models.conversation import Conversation
 from openai import OpenAI
 from langchain_openai import ChatOpenAI
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
 from src.config import get_settings
 from src.utils.logger import get_logger
+from src.repositories.conversation_repository import ConversationRepository
+from src.repositories.message_repository import MessageRepository
+from src.sql_models.agent import Agent
 
 settings = get_settings()
 logger = get_logger(__name__)
@@ -15,7 +24,15 @@ logger = get_logger(__name__)
 class CompanyAgent:
     """Company Agent for providing companionship, emotional support, and daily conversation."""
     
-    def __init__(self):
+    AGENT_NAME = "company"  # Agent name in database
+    
+    def __init__(self, db_session: Optional[AsyncSession] = None):
+        """
+        Initialize Company Agent.
+        
+        Args:
+            db_session: Optional async database session for context persistence
+        """
         # Initialize default LLM client with AIHubMix
         if not settings.aihubmix_api_key:
             raise ValueError("AIHUBMIX_API_KEY is required. Please set it in .env file or environment variables.")
@@ -39,6 +56,10 @@ class CompanyAgent:
         # Keep last 15 messages for context (more than other agents for better companionship)
         self._memories: Dict[str, ConversationBufferWindowMemory] = {}
         self._default_memory_window = 15
+        
+        # Database session for CRDT operations
+        self.db_session = db_session
+        self._agent_id: Optional[int] = None
     
     def _get_llm_client(self, api_key: Optional[str] = None, base_url: Optional[str] = None) -> OpenAI:
         """
@@ -187,6 +208,160 @@ class CompanyAgent:
         """
         return len(self._memories)
     
+    async def _get_agent_id(self) -> Optional[int]:
+        """
+        Get agent ID from database by name.
+        
+        Returns:
+            Agent ID if found, None otherwise
+        """
+        if self._agent_id:
+            return self._agent_id
+        
+        if not self.db_session:
+            logger.warning("Database session not available, cannot get agent_id")
+            return None
+        
+        try:
+            stmt = select(Agent).where(Agent.name == self.AGENT_NAME)
+            result = await self.db_session.execute(stmt)
+            agent = result.scalar_one_or_none()
+            
+            if agent:
+                self._agent_id = agent.id
+                logger.info(f"Found agent_id={self._agent_id} for agent '{self.AGENT_NAME}'")
+                return self._agent_id
+            else:
+                logger.warning(f"Agent '{self.AGENT_NAME}' not found in database")
+                return None
+        except Exception as e:
+            logger.error(f"Error getting agent_id: {e}", exc_info=True)
+            return None
+    
+    async def _get_or_create_conversation(
+        self,
+        session_id: Optional[str],
+        user_id: Optional[int]
+    ) -> Optional["Conversation"]:
+        """
+        Get or create conversation for the session.
+        
+        Args:
+            session_id: Session identifier
+            user_id: Optional user ID
+            
+        Returns:
+            Conversation instance or None
+        """
+        if not self.db_session or not session_id:
+            return None
+        
+        try:
+            agent_id = await self._get_agent_id()
+            if not agent_id:
+                return None
+            
+            # Get or create conversation
+            conv_repo = ConversationRepository(self.db_session)
+            conversation = await conv_repo.get_by_session_id(
+                session_id=session_id,
+                agent_id=agent_id,
+                user_id=user_id
+            )
+            
+            return conversation
+            
+        except Exception as e:
+            logger.error(f"Error getting or creating conversation: {e}", exc_info=True)
+            return None
+    
+    async def _load_conversation_from_db(
+        self,
+        session_id: Optional[str],
+        user_id: Optional[int]
+    ) -> Optional[List[Dict[str, str]]]:
+        """
+        Load conversation history from database.
+        
+        Args:
+            session_id: Session identifier
+            user_id: Optional user ID
+            
+        Returns:
+            List of messages in format [{"role": "...", "content": "..."}] or None
+        """
+        conversation = await self._get_or_create_conversation(session_id, user_id)
+        if not conversation:
+            return None
+        
+        try:
+            # Load messages
+            msg_repo = MessageRepository(self.db_session)
+            messages = await msg_repo.get_recent_messages(
+                conversation_id=conversation.id,
+                limit=self._default_memory_window
+            )
+            
+            # Convert to format expected by LangChain
+            history = []
+            for msg in messages:
+                history.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
+            
+            logger.info(f"Loaded {len(history)} messages from database for session: {session_id}")
+            return history
+            
+        except Exception as e:
+            logger.error(f"Error loading conversation from database: {e}", exc_info=True)
+            return None
+    
+    async def _save_message_to_db(
+        self,
+        session_id: Optional[str],
+        user_id: Optional[int],
+        role: str,
+        content: str,
+        extra_metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Save message to database.
+        
+        Args:
+            session_id: Session identifier
+            user_id: Optional user ID
+            role: Message role (user, assistant, system)
+            content: Message content
+            extra_metadata: Optional metadata
+            
+        Returns:
+            True if saved successfully, False otherwise
+        """
+        conversation = await self._get_or_create_conversation(session_id, user_id)
+        if not conversation:
+            return False
+        
+        try:
+            # Save message
+            msg_repo = MessageRepository(self.db_session)
+            await msg_repo.create(
+                conversation_id=conversation.id,
+                role=role,
+                content=content,
+                extra_metadata=extra_metadata
+            )
+            
+            # Commit the transaction
+            await self.db_session.commit()
+            logger.debug(f"Saved {role} message to database for session: {session_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving message to database: {e}", exc_info=True)
+            await self.db_session.rollback()
+            return False
+    
     def _detect_language(self, text: str) -> str:
         """
         Detect if the text is primarily Chinese or English.
@@ -214,6 +389,7 @@ class CompanyAgent:
         user_query: str,
         conversation_history: Optional[List[Dict[str, str]]] = None,
         session_id: Optional[str] = None,
+        user_id: Optional[int] = None,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -224,22 +400,40 @@ class CompanyAgent:
             user_query: User's message or question
             conversation_history: Optional conversation history (list of messages with role and content)
             session_id: Optional session identifier for maintaining conversation context
+            user_id: Optional user ID for database persistence
             api_key: Optional API key (if provided, uses OpenRouter)
             base_url: Optional base URL (if provided, uses this URL)
             
         Returns:
             Dictionary containing companionship response
         """
-        logger.info(f"Processing companionship query: {user_query[:100]}... (session: {session_id or 'no-session'})")
+        logger.info(f"Processing companionship query: {user_query[:100]}... (session: {session_id or 'no-session'}, user_id: {user_id})")
         
         # Detect language first
         language = self._detect_language(user_query)
         
+        # Load conversation history from database if available
+        db_history = None
+        if session_id and self.db_session:
+            db_history = await self._load_conversation_from_db(session_id, user_id)
+        
+        # Use database history if available, otherwise use provided history
+        effective_history = db_history if db_history else conversation_history
+        
         # Load conversation history into LangChain memory for this session (only if session_id is provided)
-        self._load_conversation_history_to_memory(conversation_history, session_id=session_id)
+        self._load_conversation_history_to_memory(effective_history, session_id=session_id)
         
         # Get memory for this session (only if session_id is provided)
         memory = self._get_or_create_memory(session_id)
+        
+        # Save user message to database
+        if session_id:
+            await self._save_message_to_db(
+                session_id=session_id,
+                user_id=user_id,
+                role="user",
+                content=user_query
+            )
         
         # Build system prompt for companionship
         if language == "zh":
@@ -310,6 +504,19 @@ Please answer in English, with natural, friendly, and warm language."""
             answer = response.content.strip()
             
             logger.info(f"Generated companionship response (length: {len(answer)}, session: {session_id or 'no-session'})")
+            
+            # Save assistant response to database
+            if session_id:
+                await self._save_message_to_db(
+                    session_id=session_id,
+                    user_id=user_id,
+                    role="assistant",
+                    content=answer,
+                    extra_metadata={
+                        "model": langchain_llm.model_name if hasattr(langchain_llm, 'model_name') else None,
+                        "language": language
+                    }
+                )
             
             return {
                 "answer": answer

@@ -28,7 +28,7 @@ settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.postgres_url)
 
 # Import all models here so Alembic can detect them
-from src.sql_models import Base, Agent, Conversation, Message
+from src.sql_models import Base, Agent, Conversation, Message, User
 
 # Set target_metadata to Base.metadata so Alembic can detect all models
 target_metadata = Base.metadata

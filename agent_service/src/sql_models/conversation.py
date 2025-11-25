@@ -17,7 +17,13 @@ class Conversation(Base):
     
     # Foreign keys
     agent_id = Column(Integer, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True, comment="Associated agent ID")
-    user_id = Column(String(255), nullable=True, index=True, comment="User ID for multi-user support")
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional user reference",
+    )
     
     # Conversation metadata
     title = Column(String(500), nullable=True, comment="Conversation title/summary (optional)")
@@ -30,6 +36,7 @@ class Conversation(Base):
     
     # Relationships
     agent = relationship("Agent", back_populates="conversations")
+    user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan", order_by="Message.sequence")
     
     # Indexes for common queries

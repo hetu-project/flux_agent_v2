@@ -40,12 +40,15 @@ services:
       context: ./agent_service
       dockerfile: Dockerfile
     container_name: hetu-agent-api
+    command: >
+      /bin/sh -c "poetry run alembic upgrade head &&
+      uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "6000:8000"
     volumes:
       # Mount source code for development
       - ./agent_service/src:/app/src:ro
-      - ./agent_service/test_twitter_fetch.py:/app/test_twitter_fetch.py:ro
+      - ./agent_service/alembic:/app/alembic:ro
       - ./scripts:/app/scripts:ro
       - ./.env:/app/.env:ro
     environment:
