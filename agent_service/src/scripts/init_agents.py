@@ -50,6 +50,11 @@ AGENTS = [
         "is_active": True,
     },
     {
+        "name": "buffett",
+        "description": "巴菲特投资顾问助手，基于沃伦·巴菲特的价值投资理念，提供投资建议、股票分析和长期投资策略。关注企业基本面、护城河分析和财务健康评估。",
+        "is_active": True,
+    },
+    {
         "name": "rag",
         "description": "RAG（检索增强生成）助手，基于项目内容进行问答，支持文档检索和上下文理解。",
         "is_active": True,

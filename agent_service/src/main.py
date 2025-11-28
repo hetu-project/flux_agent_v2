@@ -31,6 +31,7 @@ from src.agents.bazi_agent import BaziAgent
 from src.agents.crypto_agent import CryptoAgent
 from src.agents.company_agent import CompanyAgent
 from src.agents.tarot_agent import TarotAgent
+from src.agents.buffett_agent import BuffettAgent
 
 # Import API routes
 from src.api.v1 import projects, tweets, chat, collections, project_content, chat_history
@@ -141,6 +142,9 @@ company_agent = CompanyAgent()
 # Initialize Tarot agent
 tarot_agent = TarotAgent()
 
+# Initialize Buffett agent
+buffett_agent = BuffettAgent()
+
 # Initialize business services
 tweet_service = TweetService(
     tweet_repo=tweet_repo,
@@ -172,6 +176,7 @@ set_dependencies(
     crypto_agent=crypto_agent,
     company_agent=company_agent,
     tarot_agent=tarot_agent,
+    buffett_agent=buffett_agent,
 )
 logger.info("Dependencies set successfully")
 
